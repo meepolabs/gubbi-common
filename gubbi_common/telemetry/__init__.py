@@ -2,8 +2,7 @@
 
 from gubbi_common.telemetry.allowlist import (
     BANNED_KEYS,
-    SPAN_ALLOWLIST,
     safe_set_attributes,
 )
 
-__all__ = ["BANNED_KEYS", "SPAN_ALLOWLIST", "safe_set_attributes"]
+__all__ = ["BANNED_KEYS", "safe_set_attributes"]

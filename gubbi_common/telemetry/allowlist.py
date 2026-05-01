@@ -6,26 +6,25 @@ dropped at the span-builder layer before they ever reach the
 exporter / batcher / sampler. Collector-side redact rules are
 defense-in-depth, not the contract.
 
-``safe_set_attributes(span_name, span, attrs)`` silently drops any key
+``safe_set_attributes(span_name, span, attrs, *, allowlist)`` silently drops any key
 that:
 
-1. Matches an entry in :data:`BANNED_KEYS` exactly, or contains any
-   :data:`BANNED_KEYS` entry as a substring (so ``content_hash``,
-   ``email_hash``, ``client_user_agent_hash`` are all rejected even
-   when not enumerated). Substring matching is the conservative
-   interpretation -- if the privacy promise is wrong, take the
-   stricter side.
-2. Is not in the allowlist for the given ``span_name``. Unknown span
-   names get an empty allowlist (every key is dropped) and a warning.
+1. Is not in the per-span allowlist.
+2. Matches an entry in :data:`BANNED_KEYS` exactly, or contains any
+   :data:`BANNED_KEYS` entry as a substring -- unless the key ends with a
+   :data:`TRAILING_MODIFIERS` suffix and its stripped base does not contain
+   any :data:`NEVER_EXEMPT_BASES` entry.
 
-The :data:`SPAN_ALLOWLIST` table is the single union of every span
-defined across consuming repos. To add a new span name, add an entry
-here and bump this package's version.
+Unknown span names (not found in the injected ``allowlist`` dict) have
+ALL attributes dropped and emit a single DEBUG log entry. Per-span
+allowlists are OWNED by the caller -- this module no longer ships a
+global ``SPAN_ALLOWLIST`` table.
 """
 
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from typing import Any, Final
 
 logger = logging.getLogger(__name__)
@@ -36,7 +35,9 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Union of the deny-lists carried by journalctl and journalctl-cloud as of
 # the migration into gubbi-common. Substring matching is applied: any
-# attribute key containing one of these tokens is dropped.
+# attribute key containing one of these tokens is dropped, UNLESS the key
+# ends with a TRAILING_MODIFIERS suffix whose stripped base does not
+# contain any NEVER_EXEMPT_BASES term.
 BANNED_KEYS: Final[frozenset[str]] = frozenset(
     {
         "body",
@@ -55,183 +56,47 @@ BANNED_KEYS: Final[frozenset[str]] = frozenset(
 
 
 # ---------------------------------------------------------------------------
-# Per-span attribute allowlists
+# Trailing-modifier exemption
 # ---------------------------------------------------------------------------
-# Every span name surfaced by either repo gets an entry. Keys are the
-# union of what each repo allowed for that span; if the two repos'
-# allowlists differ for the same span, this module ships the stricter
-# (smaller) intersection only -- but at the time of extraction the only
-# overlapping span name is ``audit.write`` and the two allowlists agree.
-#
-# Correlation ID is allowlisted for every span so transport middleware
-# can stamp it everywhere without a per-span exception.
-_CORRELATION: Final[frozenset[str]] = frozenset({"correlation_id"})
-
-
-# journalctl spans (from journalctl/journalctl/telemetry/attrs.py).
-_MCP_TOOL_CALL: Final[frozenset[str]] = frozenset(
-    {
-        "tool.name",
-        "user_id",
-        "tool.scope_required",
-        "result",
-        "result.size_chars",
-        "latency_ms",
-    }
+# Attribute keys ending in any of these suffixes skip the BANNED_KEYS
+# substring check, allowing hashed / counted / sized forms of otherwise-
+# banned tokens (e.g. client_user_agent_hash, query_count, body_size)
+# unless the stripped base contains a NEVER_EXEMPT_BASES term.
+TRAILING_MODIFIERS: Final[tuple[str, ...]] = (
+    "_hash",
+    "_count",
+    "_size",
+    "_bytes",
+    "_length",
+    "_present",
+    "_fp",
+    "_id",
 )
 
-_MCP_TOOL_RESPONSE_SIZE_CHECK: Final[frozenset[str]] = frozenset(
-    {
-        "tool.name",
-        "size_chars",
-        "error_threshold_hit",
-    }
+# Bases that are never exempt, even when followed by a trailing modifier.
+# Example: password_hash, session_token_id, api_credential_fp are all
+# still dropped because their stripped base contains one of these terms.
+NEVER_EXEMPT_BASES: Final[tuple[str, ...]] = (
+    "password",
+    "secret",
+    "token",
+    "credential",
+    "key",
 )
-
-_DB_QUERY_USER_SCOPED: Final[frozenset[str]] = frozenset(
-    {
-        "query_kind",
-        "user_id",
-        "row_count",
-        "latency_ms",
-    }
-)
-
-_EMBEDDING_ENCODE: Final[frozenset[str]] = frozenset(
-    {
-        "text_hash",
-        "text_len",
-        "latency_ms",
-    }
-)
-
-_CIPHER_OP: Final[frozenset[str]] = frozenset(
-    {
-        "version",
-        "field_kind",
-        "bytes_processed",
-        "latency_ms",
-    }
-)
-
-_AUDIT_WRITE: Final[frozenset[str]] = frozenset(
-    {
-        "event_type",
-        "target_id",
-        "actor_type",
-        "success",
-        "latency_ms",
-    }
-)
-
-
-# journalctl-cloud spans (from
-# journalctl-cloud/journalctl_cloud/telemetry/attrs.py).
-_AUTH_BEARER_INTROSPECT: Final[frozenset[str]] = frozenset(
-    {
-        "cache.hit",
-        "token_fp",
-        "hydra.status_code",
-        "result",
-        "latency_ms",
-    }
-)
-
-_AUTH_SESSION_RESOLVE: Final[frozenset[str]] = frozenset(
-    {
-        "cache.hit",
-        "cookie_fp",
-        "kratos.status_code",
-        "result",
-        "latency_ms",
-    }
-)
-
-_AUTH_SUBSCRIPTION_CHECK: Final[frozenset[str]] = frozenset(
-    {
-        "user_id",
-        "tier",
-        "cache.hit",
-        "result",
-        "latency_ms",
-    }
-)
-
-_AUTH_RATELIMIT_CHECK: Final[frozenset[str]] = frozenset(
-    {
-        "user_id",
-        "bucket",
-        "tokens_remaining",
-        "result",
-    }
-)
-
-_AUTH_JIT_PROVISION: Final[frozenset[str]] = frozenset(
-    {
-        "user_id",
-        "kratos_identity_id",
-        "was_inserted",
-        "latency_ms",
-    }
-)
-
-_GATEWAY_FORWARD: Final[frozenset[str]] = frozenset(
-    {
-        "target_url",
-        "user_id",
-        "method",
-        "path",
-        "chunks_streamed",
-        "total_bytes",
-        "upstream_status",
-        "latency_ms_first_byte",
-        "latency_ms_total",
-    }
-)
-
-_WEBHOOK_KRATOS: Final[frozenset[str]] = frozenset(
-    {
-        "event_type",
-        "kratos_identity_id",
-        "idempotent_skip",
-        "latency_ms",
-    }
-)
-
-# Cloud's well-known PRM span allowlists ``client_user_agent_hash``,
-# which is dropped under substring matching. Kept here as an empty set
-# so the span name is recognised; emitting that key now logs a debug
-# line and drops the value. Privacy improvement, not a regression.
-_WELL_KNOWN_PRM: Final[frozenset[str]] = frozenset()
-
-
-SPAN_ALLOWLIST: dict[str, frozenset[str]] = {
-    # journalctl spans
-    "mcp.tool_call": _MCP_TOOL_CALL | _CORRELATION,
-    "mcp.tool_response_size_check": _MCP_TOOL_RESPONSE_SIZE_CHECK | _CORRELATION,
-    "db.query.user_scoped": _DB_QUERY_USER_SCOPED | _CORRELATION,
-    "embedding.encode": _EMBEDDING_ENCODE | _CORRELATION,
-    "cipher.encrypt": _CIPHER_OP | _CORRELATION,
-    "cipher.decrypt": _CIPHER_OP | _CORRELATION,
-    "http.request": _CORRELATION,
-    # cloud-api spans
-    "auth.bearer_introspect": _AUTH_BEARER_INTROSPECT | _CORRELATION,
-    "auth.session_resolve": _AUTH_SESSION_RESOLVE | _CORRELATION,
-    "auth.subscription_check": _AUTH_SUBSCRIPTION_CHECK | _CORRELATION,
-    "auth.ratelimit_check": _AUTH_RATELIMIT_CHECK | _CORRELATION,
-    "auth.jit_provision": _AUTH_JIT_PROVISION | _CORRELATION,
-    "gateway.forward": _GATEWAY_FORWARD | _CORRELATION,
-    "webhook.kratos_identity_created": _WEBHOOK_KRATOS | _CORRELATION,
-    "webhook.kratos_identity_updated": _WEBHOOK_KRATOS | _CORRELATION,
-    "webhook.kratos_identity_deleted": _WEBHOOK_KRATOS | _CORRELATION,
-    "well_known.protected_resource_metadata": _WELL_KNOWN_PRM | _CORRELATION,
-    # shared
-    "audit.write": _AUDIT_WRITE | _CORRELATION,
-}
 
 
 def _is_banned(key: str) -> bool:
-    """Return True if *key* matches a banned token by exact or substring match."""
+    """Return True if *key* is banned.
+
+    Applies trailing-modifier exemption: if *key* ends with a
+    :data:`TRAILING_MODIFIERS` suffix, the BANNED_KEYS substring check is
+    skipped. However, if the stripped base contains any
+    :data:`NEVER_EXEMPT_BASES` term, the key remains banned.
+    """
+    for modifier in TRAILING_MODIFIERS:
+        if key.endswith(modifier):
+            base = key[: -len(modifier)]
+            return any(never_exempt in base for never_exempt in NEVER_EXEMPT_BASES)
     if key in BANNED_KEYS:
         return True
     return any(token in key for token in BANNED_KEYS)
@@ -240,7 +105,9 @@ def _is_banned(key: str) -> bool:
 def safe_set_attributes(
     span_name: str,
     span: Any,
-    attrs: dict[str, Any],
+    attrs: Mapping[str, Any],
+    *,
+    allowlist: Mapping[str, frozenset[str]],
 ) -> None:
     """Set attributes on *span*, dropping any banned or non-allowlisted key.
 
@@ -256,41 +123,33 @@ def safe_set_attributes(
     span_name:
         The canonical span name (e.g. ``"mcp.tool_call"``,
         ``"auth.bearer_introspect"``). Used to look up the allowlist.
-        Unknown span names log a warning and fall back to the global
-        deny-list only (banned keys still dropped, everything else
-        passed through). This matches the historical cloud-api
-        behaviour and lets new spans roll out without a release of this
-        package -- with a paper trail in the logs.
+        Unknown span names drop ALL attributes and emit one DEBUG log.
     span:
         The OpenTelemetry span to set attributes on. Calls
         ``span.set_attributes(dict)`` exactly once with the filtered
         result.
     attrs:
         Dictionary of ``{key: value}`` to set.
+    allowlist:
+        Per-span attribute allowlist injected by the caller. A mapping
+        from span name to frozenset of allowed attribute keys.
     """
-    allowed = SPAN_ALLOWLIST.get(span_name)
+    allowed = allowlist.get(span_name)
 
     if allowed is None:
-        logger.warning(
-            "safe_set_attributes: unknown span_name %r -- applying global deny-list only",
+        logger.debug(
+            "safe_set_attributes: unknown span_name %r -- dropping all attributes",
             span_name,
         )
-        filtered: dict[str, Any] = {}
-        for key, value in attrs.items():
-            if _is_banned(key):
-                logger.warning(
-                    "Dropping banned span attribute %r on span %s",
-                    key,
-                    span_name,
-                )
-                continue
-            filtered[key] = value
-        span.set_attributes(filtered)
+        span.set_attributes({})
         return
 
-    filtered = {}
+    filtered: dict[str, Any] = {}
     dropped: list[str] = []
     for key, value in attrs.items():
+        if key not in allowed:
+            dropped.append(key)
+            continue
         if _is_banned(key):
             logger.warning(
                 "Dropping banned span attribute %r on span %s",
@@ -298,10 +157,7 @@ def safe_set_attributes(
                 span_name,
             )
             continue
-        if key in allowed:
-            filtered[key] = value
-        else:
-            dropped.append(key)
+        filtered[key] = value
 
     if dropped:
         logger.debug(
