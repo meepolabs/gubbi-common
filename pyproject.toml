@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "gubbi-common"
-version = "0.2.0"
+version = "0.3.0"
 description = "Shared contracts (audit, auth, telemetry) for Gubbi packages"
 authors = ["madhukar01 <mholla8@gmail.com>"]
 license = "AGPL-3.0-or-later"
@@ -9,6 +9,10 @@ packages = [{include = "gubbi_common"}]
 
 [tool.poetry.dependencies]
 python = "^3.11"
+asyncpg = {version = ">=0.29", optional = true}
+
+[tool.poetry.extras]
+db = ["asyncpg"]
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0.0"

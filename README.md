@@ -19,7 +19,19 @@ Pin a tag, not a branch. Bump the tag when the contract changes.
 
 ## Modules
 
-Populated in subsequent commits as content migrates from sibling repos.
+### `gubbi_common.telemetry`
+
+OTel span attribute filtering (`safe_set_attributes`, allowlist contracts).
+
+### `gubbi_common.db` (optional extra: `[db]`)
+
+User-scoped asyncpg connection helper (`user_scoped_connection`,
+`MissingUserIdError`). Requires asyncpg. Install with:
+
+```toml
+# pyproject.toml (poetry)
+gubbi-common = { git = "...", tag = "v0.3.0", extras = ["db"] }
+```
 
 ## Develop
 
