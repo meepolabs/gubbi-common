@@ -62,6 +62,15 @@ class Action:
     SUBSCRIPTION_OVERRIDE: Final = "subscription.override"
 
     # ---------------------------------------------------------------
+    # Journal content operations
+    # ---------------------------------------------------------------
+    ENTRY_CREATED: Final = "entry.created"
+    ENTRY_UPDATED: Final = "entry.updated"
+    ENTRY_DELETED: Final = "entry.deleted"
+    TOPIC_CREATED: Final = "topic.created"
+    CONVERSATION_SAVED: Final = "conversation.saved"
+
+    # ---------------------------------------------------------------
     # Privileged operations
     # ---------------------------------------------------------------
     SECRET_ROTATED: Final = "secret.rotated"  # noqa: S105 -- action label, not a password
