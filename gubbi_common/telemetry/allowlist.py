@@ -230,9 +230,11 @@ SPAN_ALLOWLIST: dict[str, frozenset[str]] = {
 }
 
 
-def _get_allowlisted_attrs(span_name: str) -> frozenset[str]:
-    """Return the allowlisted attribute set for *span_name*, or an empty set."""
-    return SPAN_ALLOWLIST.get(span_name, frozenset())
+def _is_banned(key: str) -> bool:
+    """Return True if *key* matches a banned token by exact or substring match."""
+    if key in BANNED_KEYS:
+        return True
+    return any(token in key for token in BANNED_KEYS)
 
 
 def safe_set_attributes(
@@ -246,51 +248,66 @@ def safe_set_attributes(
     :data:`BANNED_KEYS`) are dropped with a WARNING log. Keys outside
     the per-span allowlist are dropped with a DEBUG log. This is the
     sole entry point for setting span attributes in journalctl and
-    journalctl-cloud -- never call ``span.set_attribute`` directly.
+    journalctl-cloud -- never call ``span.set_attribute`` /
+    ``span.set_attributes`` directly.
 
     Parameters
     ----------
     span_name:
         The canonical span name (e.g. ``"mcp.tool_call"``,
         ``"auth.bearer_introspect"``). Used to look up the allowlist.
-        Unknown span names log a warning and behave as an empty
-        allowlist (every key is dropped after the banned-key filter).
+        Unknown span names log a warning and fall back to the global
+        deny-list only (banned keys still dropped, everything else
+        passed through). This matches the historical cloud-api
+        behaviour and lets new spans roll out without a release of this
+        package -- with a paper trail in the logs.
     span:
-        The OpenTelemetry span to set attributes on. Duck-typed: any
-        object with a ``set_attribute(key, value)`` method works.
+        The OpenTelemetry span to set attributes on. Calls
+        ``span.set_attributes(dict)`` exactly once with the filtered
+        result.
     attrs:
         Dictionary of ``{key: value}`` to set.
     """
-    allowlist = _get_allowlisted_attrs(span_name)
-    if span_name not in SPAN_ALLOWLIST:
+    allowed = SPAN_ALLOWLIST.get(span_name)
+
+    if allowed is None:
         logger.warning(
             "safe_set_attributes: unknown span_name %r -- applying global deny-list only",
             span_name,
         )
+        filtered: dict[str, Any] = {}
+        for key, value in attrs.items():
+            if _is_banned(key):
+                logger.warning(
+                    "Dropping banned span attribute %r on span %s",
+                    key,
+                    span_name,
+                )
+                continue
+            filtered[key] = value
+        span.set_attributes(filtered)
+        return
 
+    filtered = {}
+    dropped: list[str] = []
     for key, value in attrs.items():
-        # Banned key check: exact match or any banned token as substring.
-        if key in BANNED_KEYS:
+        if _is_banned(key):
             logger.warning(
                 "Dropping banned span attribute %r on span %s",
                 key,
                 span_name,
             )
             continue
-        banned_substring_hit = next((b for b in BANNED_KEYS if b in key), None)
-        if banned_substring_hit is not None:
-            logger.warning(
-                "Dropping span attribute %r (contains banned token %r) on span %s",
-                key,
-                banned_substring_hit,
-                span_name,
-            )
-            continue
-        if key in allowlist:
-            span.set_attribute(key, value)
+        if key in allowed:
+            filtered[key] = value
         else:
-            logger.debug(
-                "Dropping non-allowlisted span attribute %r on span %s",
-                key,
-                span_name,
-            )
+            dropped.append(key)
+
+    if dropped:
+        logger.debug(
+            "safe_set_attributes(%r): dropped non-allowlisted keys %s",
+            span_name,
+            dropped,
+        )
+
+    span.set_attributes(filtered)

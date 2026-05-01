@@ -4,4 +4,4 @@ import gubbi_common
 
 
 def test_version_exposed() -> None:
-    assert gubbi_common.__version__ == "0.1.0"
+    assert gubbi_common.__version__ == "0.1.1"

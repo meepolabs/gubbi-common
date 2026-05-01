@@ -14,13 +14,13 @@ from gubbi_common.telemetry.allowlist import (
 
 
 class _SpanStub:
-    """Captures set_attribute() calls for assertions."""
+    """Captures the single set_attributes() call for assertions."""
 
     def __init__(self) -> None:
         self.attrs: dict[str, Any] = {}
 
-    def set_attribute(self, key: str, value: Any) -> None:
-        self.attrs[key] = value
+    def set_attributes(self, attrs: dict[str, Any]) -> None:
+        self.attrs.update(attrs)
 
 
 # ---------------------------------------------------------------------------
@@ -112,7 +112,7 @@ def test_audit_write_allowlist_matches_documented_keys() -> None:
 
 @pytest.mark.unit
 def test_unknown_span_name_falls_back_to_banned_only() -> None:
-    """Unknown span names: banned keys still dropped, all others dropped too."""
+    """Unknown span names: banned keys still dropped, everything else passes."""
     span = _SpanStub()
     safe_set_attributes(
         "totally.unknown.span",
@@ -121,8 +121,8 @@ def test_unknown_span_name_falls_back_to_banned_only() -> None:
     )
     # banned filtered
     assert "content" not in span.attrs
-    # not in any allowlist either, so also dropped
-    assert "user_id" not in span.attrs
+    # other keys pass through (no allowlist available, conservative on bans)
+    assert span.attrs.get("user_id") == "u-1"
 
 
 @pytest.mark.unit
