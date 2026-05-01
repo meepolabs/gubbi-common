@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.0 (2026-04-30)
+
+**Non-breaking (additive)**
+
+- Added `gubbi_common.db` submodule with `user_scoped_connection` async
+  context manager and `MissingUserIdError`.
+- Added optional `asyncpg` dependency (`>=0.29`). Install with
+  `pip install gubbi-common[db]` or poetry `extras = ["db"]`.
+
 ## 0.2.0 (2026-04-30)
 
 **BREAKING CHANGE**
