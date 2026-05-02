@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.4.2 -- 2026-05-02
+
+**Non-breaking (additive)**
+
+### Added
+
+- `gubbi_common.auth.gateway_signature` module: HMAC-SHA256 signer /
+  verifier for cross-process auth handoff (`X-Auth-Signature` header),
+  plus structured exception hierarchy (`SignatureError`,
+  `StaleSignatureError`, `FutureSignatureError`,
+  `MalformedTimestampError`, `MismatchedSignatureError`). Exposes
+  `GATEWAY_CONTRACT_VERSION = 1` and `MAX_SKEW_SECONDS = 30`. Canonical
+  input format:
+  `"{version}|{user_id}|{scopes}|{timestamp}|{method}|{path}"`,
+  UTF-8-encoded; verifier validates an ISO 8601
+  `YYYY-MM-DDTHH:MM:SSZ` UTC timestamp before computing HMAC and uses
+  `hmac.compare_digest` for constant-time comparison. Both signer and
+  verifier reject any input containing the canonical-input field
+  separator `|` to prevent canonicalisation-confusion ambiguity.
+
+Consumer guidance: callers must pass the secret as `bytes` (decode
+`hex` / `base64` from env at the call site as appropriate). Both signer
+and verifier MUST pin the same `gubbi-common` version -- changing
+`GATEWAY_CONTRACT_VERSION` is a contract break that invalidates every
+in-flight signature.
+
 ## 0.4.1 (2026-05-02)
 
 **Non-breaking (additive + privacy / safety fixes)**
