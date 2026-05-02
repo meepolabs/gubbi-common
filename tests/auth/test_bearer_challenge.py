@@ -8,6 +8,10 @@ import pytest
 
 from gubbi_common.auth.bearer_challenge import build_bearer_challenge
 
+# ===========================================================================
+# Happy paths (existing contract)
+# ===========================================================================
+
 
 @pytest.mark.unit
 def test_no_credentials_path_includes_only_resource_metadata() -> None:
@@ -106,3 +110,147 @@ def test_parameter_order_is_stable() -> None:
     scope_idx = out.index('required_scope="')
     rm_idx = out.index('resource_metadata="')
     assert error_idx < scope_idx < rm_idx
+
+
+# ===========================================================================
+# Header-injection rejection -- forbidden characters (C-8)
+# ===========================================================================
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "bad_char",
+    ["\r", "\n", "\x00", "\t", "\x1f", "\x7f"],
+    ids=["CR", "LF", "NUL", "HTAB", "US", "DEL"],
+)
+def test_forbidden_control_chars_in_error_rejected(bad_char: str) -> None:
+    with pytest.raises(ValueError, match="forbidden character"):
+        build_bearer_challenge(error=f"invalid{bad_char}token")
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "bad_char",
+    ["\r", "\n", "\x00"],
+    ids=["CR", "LF", "NUL"],
+)
+def test_forbidden_control_chars_in_required_scope_rejected(bad_char: str) -> None:
+    with pytest.raises(ValueError, match="forbidden character"):
+        build_bearer_challenge(required_scope=f"journal{bad_char}write")
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "bad_char",
+    ["\r", "\n", "\x00"],
+    ids=["CR", "LF", "NUL"],
+)
+def test_forbidden_control_chars_in_resource_metadata_rejected(bad_char: str) -> None:
+    with pytest.raises(ValueError, match="forbidden character"):
+        build_bearer_challenge(resource_metadata_url=f"/.well-known{bad_char}foo")
+
+
+@pytest.mark.unit
+def test_double_quote_in_error_rejected() -> None:
+    """Quote injection: error='invalid", malicious="x' must not be possible."""
+    with pytest.raises(ValueError, match="forbidden character"):
+        build_bearer_challenge(error='invalid", malicious="x')
+
+
+@pytest.mark.unit
+def test_double_quote_in_required_scope_rejected() -> None:
+    with pytest.raises(ValueError, match="forbidden character"):
+        build_bearer_challenge(required_scope='journal", malicious="x')
+
+
+@pytest.mark.unit
+def test_double_quote_in_resource_metadata_rejected() -> None:
+    with pytest.raises(ValueError, match="forbidden character"):
+        build_bearer_challenge(resource_metadata_url='/foo", malicious="x')
+
+
+@pytest.mark.unit
+def test_backslash_in_error_rejected() -> None:
+    with pytest.raises(ValueError, match="forbidden character"):
+        build_bearer_challenge(error="bad\\token")
+
+
+@pytest.mark.unit
+def test_backslash_in_required_scope_rejected() -> None:
+    with pytest.raises(ValueError, match="forbidden character"):
+        build_bearer_challenge(required_scope="bad\\scope")
+
+
+@pytest.mark.unit
+def test_backslash_in_resource_metadata_rejected() -> None:
+    with pytest.raises(ValueError, match="forbidden character"):
+        build_bearer_challenge(resource_metadata_url="/foo\\bar")
+
+
+# ===========================================================================
+# Header-injection rejection -- grammar violations (C-8)
+# ===========================================================================
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "bad_error",
+    [
+        "invalid token",  # space disallowed in token
+        "(comment)",  # parens disallowed
+        "with,comma",  # comma disallowed
+        "with;semi",  # semicolon disallowed
+        "",  # empty -- token is 1*tchar
+    ],
+)
+def test_invalid_error_grammar_rejected(bad_error: str) -> None:
+    with pytest.raises(ValueError, match="RFC 7230 token"):
+        build_bearer_challenge(error=bad_error)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "bad_scope",
+    [
+        "",  # empty -- scope is 1*scope-token
+        " journal:write",  # leading space (scope-token has no leading SP)
+        "journal:write ",  # trailing space
+        "journal:write  another",  # double space between tokens
+        "scope\xe9",  # non-ASCII -- outside scope-token grammar
+    ],
+)
+def test_invalid_required_scope_grammar_rejected(bad_scope: str) -> None:
+    with pytest.raises(ValueError, match="RFC 6749 scope grammar"):
+        build_bearer_challenge(required_scope=bad_scope)
+
+
+@pytest.mark.unit
+def test_resource_metadata_url_must_start_with_slash_or_https() -> None:
+    with pytest.raises(ValueError, match="must start with"):
+        build_bearer_challenge(resource_metadata_url="example.com/foo")
+
+
+@pytest.mark.unit
+def test_resource_metadata_url_http_rejected() -> None:
+    """HTTP is not accepted -- the OAuth metadata document must be fetched over TLS."""
+    with pytest.raises(ValueError, match="must start with"):
+        build_bearer_challenge(resource_metadata_url="http://example.com/foo")
+
+
+@pytest.mark.unit
+def test_relative_resource_metadata_accepted() -> None:
+    out = build_bearer_challenge(resource_metadata_url="/.well-known/oauth-protected-resource")
+    assert 'resource_metadata="/.well-known/oauth-protected-resource"' in out
+
+
+@pytest.mark.unit
+def test_https_resource_metadata_accepted() -> None:
+    out = build_bearer_challenge(resource_metadata_url="https://example.com/.well-known/x")
+    assert 'resource_metadata="https://example.com/.well-known/x"' in out
+
+
+@pytest.mark.unit
+def test_multi_scope_required_scope_accepted() -> None:
+    """RFC 6749 allows space-separated scope-tokens."""
+    out = build_bearer_challenge(required_scope="journal:read journal:write")
+    assert 'required_scope="journal:read journal:write"' in out
