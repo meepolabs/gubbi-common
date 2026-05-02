@@ -10,10 +10,14 @@ defense-in-depth, not the contract.
 that:
 
 1. Is not in the per-span allowlist.
-2. Matches an entry in :data:`BANNED_KEYS` exactly, or contains any
+2. Contains an entry from :data:`NEVER_EXEMPT_BASES` as a substring.
+3. Matches an entry in :data:`BANNED_KEYS` exactly, or contains any
    :data:`BANNED_KEYS` entry as a substring -- unless the key ends with a
-   :data:`TRAILING_MODIFIERS` suffix and its stripped base does not contain
-   any :data:`NEVER_EXEMPT_BASES` entry.
+   :data:`DERIVATIVE_MODIFIERS` suffix (`_hash`, `_count`, `_size`,
+   `_bytes`, `_len`, `_fp`). Those suffixes are structurally privacy-safe
+   (a hash / count / size cannot carry the underlying value); other
+   suffixes (`_id`, `_present`) can reveal or carry the value and so are
+   NOT exempt.
 
 Unknown span names (not found in the injected ``allowlist`` dict) have
 ALL attributes dropped and emit a single DEBUG log entry. Per-span
@@ -36,8 +40,8 @@ logger = logging.getLogger(__name__)
 # Union of the deny-lists carried by journalctl and journalctl-cloud as of
 # the migration into gubbi-common. Substring matching is applied: any
 # attribute key containing one of these tokens is dropped, UNLESS the key
-# ends with a TRAILING_MODIFIERS suffix whose stripped base does not
-# contain any NEVER_EXEMPT_BASES term.
+# ends with a DERIVATIVE_MODIFIERS suffix (and its base is not in
+# NEVER_EXEMPT_BASES).
 BANNED_KEYS: Final[frozenset[str]] = frozenset(
     {
         "body",
@@ -56,26 +60,33 @@ BANNED_KEYS: Final[frozenset[str]] = frozenset(
 
 
 # ---------------------------------------------------------------------------
-# Trailing-modifier exemption
+# Derivative-suffix exemption
 # ---------------------------------------------------------------------------
-# Attribute keys ending in any of these suffixes skip the BANNED_KEYS
-# substring check, allowing hashed / counted / sized forms of otherwise-
-# banned tokens (e.g. client_user_agent_hash, query_count, body_size)
-# unless the stripped base contains a NEVER_EXEMPT_BASES term.
-TRAILING_MODIFIERS: Final[tuple[str, ...]] = (
-    "_hash",
-    "_count",
-    "_size",
-    "_bytes",
-    "_length",
-    "_present",
-    "_fp",
-    "_id",
+# Attribute keys ending in any of these suffixes describe a *derivative*
+# quantity of the underlying value (a sha256 digest, a count, a size in
+# bytes / chars, a fingerprint). They are structurally privacy-safe: the
+# suffix's grammar cannot encode the original value.
+#
+# Notably absent: `_id` and `_present`. ``email_id`` could itself be PII
+# (a stable per-email identifier joinable to the email), and ``_present``
+# carries a one-bit signal that is still attributable to a user. Both
+# now flow through the BANNED_KEYS substring check.
+DERIVATIVE_MODIFIERS: Final[frozenset[str]] = frozenset(
+    {
+        "_hash",
+        "_count",
+        "_size",
+        "_len",
+        "_fp",
+        "_bytes",
+    }
 )
 
-# Bases that are never exempt, even when followed by a trailing modifier.
-# Example: password_hash, session_token_id, api_credential_fp are all
-# still dropped because their stripped base contains one of these terms.
+# Bases whose presence anywhere in a key bans it unconditionally, even
+# with a derivative suffix. Example: `password_hash`, `session_token_id`,
+# `api_credential_fp` are all dropped. The intent: a hashed password is
+# still a credential, and credential-shaped tokens should never appear
+# in telemetry under any guise.
 NEVER_EXEMPT_BASES: Final[tuple[str, ...]] = (
     "password",
     "secret",
@@ -86,20 +97,22 @@ NEVER_EXEMPT_BASES: Final[tuple[str, ...]] = (
 
 
 def _is_banned(key: str) -> bool:
-    """Return True if *key* is banned.
+    """Return True if *key* must be dropped from span attributes.
 
-    Applies trailing-modifier exemption: if *key* ends with a
-    :data:`TRAILING_MODIFIERS` suffix, the BANNED_KEYS substring check is
-    skipped. However, if the stripped base contains any
-    :data:`NEVER_EXEMPT_BASES` term, the key remains banned.
+    Order:
+    1. NEVER_EXEMPT_BASES is checked first -- credential-shaped tokens
+       are banned even with a derivative suffix (``password_hash`` is
+       still a credential).
+    2. A trailing :data:`DERIVATIVE_MODIFIERS` suffix exempts the key
+       from the BANNED_KEYS substring check.
+    3. Otherwise the key is banned if it equals or contains any
+       :data:`BANNED_KEYS` entry as a substring.
     """
-    for modifier in TRAILING_MODIFIERS:
-        if key.endswith(modifier):
-            base = key[: -len(modifier)]
-            return any(never_exempt in base for never_exempt in NEVER_EXEMPT_BASES)
-    if key in BANNED_KEYS:
+    if any(never in key for never in NEVER_EXEMPT_BASES):
         return True
-    return any(token in key for token in BANNED_KEYS)
+    if any(key.endswith(suffix) for suffix in DERIVATIVE_MODIFIERS):
+        return False
+    return key in BANNED_KEYS or any(token in key for token in BANNED_KEYS)
 
 
 def safe_set_attributes(
@@ -112,11 +125,11 @@ def safe_set_attributes(
     """Set attributes on *span*, dropping any banned or non-allowlisted key.
 
     Banned keys (exact match or substring match against
-    :data:`BANNED_KEYS`) are dropped with a WARNING log. Keys outside
-    the per-span allowlist are dropped with a DEBUG log. This is the
-    sole entry point for setting span attributes in journalctl and
-    journalctl-cloud -- never call ``span.set_attribute`` /
-    ``span.set_attributes`` directly.
+    :data:`BANNED_KEYS`, modulo :data:`DERIVATIVE_MODIFIERS` exemption)
+    are dropped with a WARNING log. Keys outside the per-span allowlist
+    are dropped with a DEBUG log. This is the sole entry point for
+    setting span attributes in journalctl and journalctl-cloud -- never
+    call ``span.set_attribute`` / ``span.set_attributes`` directly.
 
     Parameters
     ----------

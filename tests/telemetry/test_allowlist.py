@@ -8,8 +8,8 @@ import pytest
 
 from gubbi_common.telemetry.allowlist import (
     BANNED_KEYS,
+    DERIVATIVE_MODIFIERS,
     NEVER_EXEMPT_BASES,
-    TRAILING_MODIFIERS,
     safe_set_attributes,
 )
 
@@ -39,10 +39,12 @@ def test_allowlist_kwarg_required() -> None:
 @pytest.mark.unit
 def test_allowlist_drives_accepted_keys() -> None:
     """Only keys in the per-span allowlist pass through."""
-    allowlist = {"my.span": frozenset({"good_key"})}
+    allowlist = {"my.span": frozenset({"good_field"})}
     span = _SpanStub()
-    safe_set_attributes("my.span", span, {"good_key": "v", "bad_key": "x"}, allowlist=allowlist)
-    assert span.attrs == {"good_key": "v"}
+    safe_set_attributes(
+        "my.span", span, {"good_field": "v", "other_field": "x"}, allowlist=allowlist
+    )
+    assert span.attrs == {"good_field": "v"}
 
 
 @pytest.mark.unit
@@ -84,7 +86,7 @@ def test_unknown_span_logs_debug(caplog: pytest.LogCaptureFixture) -> None:
 
 
 # ===========================================================================
-# Standard substring deny (no trailing modifier)
+# Standard substring deny (no derivative suffix)
 # ===========================================================================
 
 
@@ -100,7 +102,7 @@ def test_banned_key_exact_match_dropped(banned_key: str) -> None:
 
 @pytest.mark.unit
 def test_banned_substring_in_key_dropped() -> None:
-    """Keys containing a banned token as substring (no trailing modifier) are dropped."""
+    """Keys containing a banned token as substring (no derivative suffix) are dropped."""
     allowlist = {"test.span": frozenset({"email_leak", "badcontent", "good"})}
     span = _SpanStub()
     safe_set_attributes(
@@ -124,46 +126,37 @@ def test_non_banned_allowlisted_key_passes() -> None:
 
 
 # ===========================================================================
-# Trailing-modifier exemption
+# Derivative-suffix exemption: <banned>_<derivative> -> ALLOWED
 # ===========================================================================
 
 
 @pytest.mark.unit
-def test_trailing_modifier_exemption_allows_suffixed_keys() -> None:
-    """Keys ending in a TRAILING_MODIFIERS suffix pass when allowlisted."""
-    allowlist = {
-        "test.span": frozenset(
-            {
-                "client_user_agent_hash",
-                "query_count",
-                "email_present",
-                "body_size",
-            }
-        ),
-    }
+@pytest.mark.parametrize(
+    "key",
+    [
+        "email_hash",
+        "body_size",
+        "query_count",
+        "summary_fp",
+        "messages_len",
+        "reasoning_hash",
+        "ip_address_hash",
+        "user_agent_hash",
+        "content_bytes",
+        "client_user_agent_hash",  # currently shipping in cloud-api -- must not regress
+    ],
+)
+def test_derivative_suffix_allows_banned_base(key: str) -> None:
+    """`<banned>_<derivative>` keys pass when allowlisted -- they describe a privacy-safe quantity."""
+    allowlist = {"test.span": frozenset({key})}
     span = _SpanStub()
-    safe_set_attributes(
-        "test.span",
-        span,
-        {
-            "client_user_agent_hash": "abc",
-            "query_count": "42",
-            "email_present": "true",
-            "body_size": "1024",
-        },
-        allowlist=allowlist,
-    )
-    assert span.attrs == {
-        "client_user_agent_hash": "abc",
-        "query_count": "42",
-        "email_present": "true",
-        "body_size": "1024",
-    }
+    safe_set_attributes("test.span", span, {key: "abc"}, allowlist=allowlist)
+    assert span.attrs == {key: "abc"}
 
 
 @pytest.mark.unit
 def test_suffixed_key_not_in_allowlist_still_dropped() -> None:
-    """Even with a trailing modifier, a key not in the per-span allowlist is dropped."""
+    """Even with a derivative suffix, a key not in the per-span allowlist is dropped."""
     allowlist = {"test.span": frozenset({"other"})}
     span = _SpanStub()
     safe_set_attributes(
@@ -187,6 +180,32 @@ def test_bare_banned_still_dropped_even_if_allowlisted() -> None:
         allowlist=allowlist,
     )
     assert span.attrs == {}
+
+
+# ===========================================================================
+# Non-derivative suffixes: `_id`, `_present` -> still BANNED if base is banned
+# ===========================================================================
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "key",
+    [
+        "email_id",
+        "email_present",
+        "content_id",
+        "body_present",
+        "messages_id",
+        "user_agent_id",
+        "ip_address_present",
+    ],
+)
+def test_non_derivative_suffix_does_not_exempt(key: str) -> None:
+    """`_id` and `_present` are NOT structural exemptions -- BANNED_KEYS substring still applies."""
+    allowlist = {"test.span": frozenset({key})}
+    span = _SpanStub()
+    safe_set_attributes("test.span", span, {key: "leak"}, allowlist=allowlist)
+    assert key not in span.attrs
 
 
 # ===========================================================================
@@ -228,17 +247,9 @@ def test_suffixed_password_still_dropped_via_never_exempt() -> None:
 
 
 @pytest.mark.unit
-def test_trailing_modifiers_defined() -> None:
-    assert TRAILING_MODIFIERS == (
-        "_hash",
-        "_count",
-        "_size",
-        "_bytes",
-        "_length",
-        "_present",
-        "_fp",
-        "_id",
-    )
+def test_derivative_modifiers_defined() -> None:
+    expected = frozenset({"_hash", "_count", "_size", "_len", "_fp", "_bytes"})
+    assert expected == DERIVATIVE_MODIFIERS
 
 
 @pytest.mark.unit

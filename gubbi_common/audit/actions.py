@@ -58,6 +58,7 @@ class Action:
     # Subscription lifecycle (M4+)
     # ---------------------------------------------------------------
     SUBSCRIPTION_CREATED: Final = "subscription.created"
+    SUBSCRIPTION_UPDATED: Final = "subscription.updated"
     SUBSCRIPTION_CANCELED: Final = "subscription.canceled"
     SUBSCRIPTION_OVERRIDE: Final = "subscription.override"
 
@@ -76,3 +77,9 @@ class Action:
     SECRET_ROTATED: Final = "secret.rotated"  # noqa: S105 -- action label, not a password
     ADMIN_QUERY_EXECUTED: Final = "admin.query_executed"
     ENCRYPTION_KEY_ROTATED: Final = "encryption.key_rotated"
+
+    # ---------------------------------------------------------------
+    # Admin / cleanup operations
+    # ---------------------------------------------------------------
+    USER_DELETED: Final = "user.deleted"
+    CLIENT_DELETED: Final = "client.deleted"
