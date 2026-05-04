@@ -1,9 +1,18 @@
 """Tests for the canonical ``Action`` enum.
 
-These tests verify Action's invariants (string-typed values, stable repr, no
-duplicates). Drift detection between gubbi-common and its consumers lives
-*in the consumer repos* as AST scans of their own source -- gubbi-common
-cannot statically know which constants its consumers import.
+Verifies Action's invariants (string-typed values, stable repr, no
+duplicates) plus a registry-level drift guard:
+``test_all_action_values_referenced_by_consumers`` asserts every Action
+constant is claimed by at least one consumer registry
+(``_CLOUD_REFERENCED`` or ``_GUBBI_REFERENCED`` in
+``gubbi_common.audit.actions``). The registries are hand-maintained from
+consumer source at release time; the test catches both dead Actions in
+the enum and missing claims when a consumer adds a new audit call.
+
+Consumer repos additionally run AST scans against their own source to
+verify every raw-string action value at a call site maps to an Action
+constant. The two sides are complementary: registries here guard the
+canonical enum; AST scans there guard call-site usage.
 """
 
 from __future__ import annotations
@@ -55,6 +64,7 @@ def test_journal_content_values_present() -> None:
     assert Action.ENTRY_DELETED == "entry.deleted"
     assert Action.TOPIC_CREATED == "topic.created"
     assert Action.CONVERSATION_SAVED == "conversation.saved"
+    assert Action.CONVERSATION_EXTRACTED == "conversation.extracted"
 
 
 @pytest.mark.unit
