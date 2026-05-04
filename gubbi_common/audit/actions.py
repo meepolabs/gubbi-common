@@ -103,11 +103,20 @@ class Action:
 
 
 # Consumer reference registries, updated from the actual consumer repos.
-# Each list contains every Action string value currently referenced in that
-# repo's source tree (production AND test files). The test
-# `test_all_action_values_referenced_by_consumers` in tests/audit/test_actions.py
-# asserts that every Action constant appears in at least one registry,
-# serving as a drift guard for the canonical Action values.
+# Each list mixes TWO categories per consumer, distinguished by inline
+# section comments:
+#   1. "Currently wired" -- Action string values referenced in that repo's
+#      production + test source today. Each entry cites its source file.
+#   2. "Not yet wired" -- consumer-domain values defined here ahead of
+#      their wiring (planned / in-flight per ongoing tasks). Each entry
+#      cites the planned-or-in-flight surface; promote the comment to
+#      "wired in <file>" when the entry lands.
+# Both categories count as "registered to a consumer" for the drift-guard
+# test `test_all_action_values_referenced_by_consumers` in
+# tests/audit/test_actions.py, which asserts every Action constant appears
+# in at least one registry. This guards both wire-format drift (consumer
+# adds a raw string forgetting to register it) and dead-Action drift
+# (constant defined in Action with no consumer claiming it).
 _CLOUD_REFERENCED: frozenset[str] = frozenset(
     {
         # --- Currently wired in cloud-api production + test code ---
