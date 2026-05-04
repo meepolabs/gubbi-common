@@ -79,7 +79,7 @@ def test_valid_actor_types_set() -> None:
 
 # TODO(m234-low): VALID_ACTOR_TYPES <-> DB CHECK constraint sync test.
 # The audit_log.actor_type CHECK constraint is defined in consumer migrations
-# (journalctl Alembic migration 0012), NOT emitted from gubbi_common/audit/sql.py.
+# (gubbi Alembic migration 0012), NOT emitted from gubbi_common/audit/sql.py.
 # Until the library either:
 #   1.) emits the DDL string, or
 #   2.) provides a helper that reads the constraint from the running schema,

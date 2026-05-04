@@ -17,8 +17,8 @@ Per RFC 9728 + MCP spec 2025-11-25:
   can discover the OAuth protected-resource metadata document. The URI
   may be relative or absolute; callers decide which to emit.
 
-The journalctl repo enforces scope and passes ``required_scope`` on 403
-responses. The journalctl-cloud gateway does not enforce scope today and
+The gubbi repo enforces scope and passes ``required_scope`` on 403
+responses. The gubbi-cloud gateway does not enforce scope today and
 omits the parameter. Both call this single builder.
 
 Inputs are validated to prevent header injection (response splitting via

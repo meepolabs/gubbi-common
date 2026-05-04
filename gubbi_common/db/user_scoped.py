@@ -12,7 +12,7 @@ GUCs:
   recall. Default ``DEFAULT_HNSW_EF_SEARCH`` matches typical production
   tuning.
 
-Both consumers (journalctl + journalctl-cloud) wrap every user-facing
+Both consumers (gubbi + gubbi-cloud) wrap every user-facing
 DB operation in this context manager so RLS is consistently enforced.
 
 ``MissingUserIdError`` is raised when callers attempt to acquire a

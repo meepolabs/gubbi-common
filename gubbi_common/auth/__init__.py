@@ -1,4 +1,4 @@
-"""Auth primitives shared by journalctl and journalctl-cloud."""
+"""Auth primitives shared by gubbi and gubbi-cloud."""
 
 from gubbi_common.auth.bearer_challenge import build_bearer_challenge
 from gubbi_common.auth.gateway_signature import (

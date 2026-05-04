@@ -7,6 +7,35 @@ tag if they don't need the new surface. See
 release-tagging policy: not every commit gets a tag; tags mark stable
 adoption points.
 
+## 0.4.4 -- 2026-05-04
+
+**Non-breaking (additive + docs)**
+
+**Consumer impact:** additive. One new public Action constant
+(`CONVERSATION_EXTRACTED`); existing callers that used the raw string
+`"conversation.extracted"` should swap to the constant. The rest of
+the diff is docstring + comment refresh from the consumer-repo
+rename. Skip-able if you don't care about the new constant.
+
+### Added
+
+- `Action.CONVERSATION_EXTRACTED = "conversation.extracted"` --
+  emitted by the extraction worker when a conversation finishes
+  processing. Closes a drift-guard gap surfaced during the gubbi.ai
+  rebrand review (gubbi/extraction/jobs/extract_conversation.py was
+  using the raw string).
+
+### Changed
+
+- Docstrings, comments, and registry-comment paths updated to reflect
+  the consumer-repo rename: `journalctl` -> `gubbi` and `journalctl-cloud`
+  -> `gubbi-cloud`. The `gubbi_common` package name is unchanged; no
+  imports break.
+- Renamed the private drift-guard registry `_JOURNALCTL_REFERENCED` to
+  `_GUBBI_REFERENCED` in `gubbi_common.audit.actions`. Both registries
+  remain underscore-prefixed (not part of the public API); the rename
+  is internal to this package and its tests.
+
 ## 0.4.3 -- 2026-05-03
 
 **Non-breaking (additive + correctness)**

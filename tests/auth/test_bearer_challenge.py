@@ -61,7 +61,7 @@ def test_required_scope_without_error_is_supported() -> None:
 
 @pytest.mark.unit
 def test_absolute_resource_metadata_url() -> None:
-    """Cloud-api may pass absolute URLs; journalctl typically passes relative."""
+    """Cloud-api may pass absolute URLs; gubbi typically passes relative."""
     out = build_bearer_challenge(
         error="invalid_token",
         resource_metadata_url="https://api.example.com/.well-known/oauth-protected-resource",

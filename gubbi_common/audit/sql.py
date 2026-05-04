@@ -1,23 +1,23 @@
-"""SQL templates for writing into the journalctl ``audit_log`` table.
+"""SQL templates for writing into the gubbi ``audit_log`` table.
 
 This module exposes:
 
 * ``AUDIT_INSERT_SQL`` -- the canonical 9-column insert (used by
-  journalctl's ``record_audit`` helper).
+  gubbi's ``record_audit`` helper).
 * ``AUDIT_INSERT_SQL_RICH`` -- 7-column insert that explicitly sets
   ``occurred_at`` (used by cloud-api when the wire timestamp differs from
   ``now()``).
 * ``AUDIT_INSERT_DEDUPED_SQL`` -- 6-column insert with ON CONFLICT DO
   NOTHING for re-delivery dedup. Relies on the partial unique index
-  ``audit_log_content_hash_uidx`` (journalctl migration 0016).
+  ``audit_log_content_hash_uidx`` (gubbi migration 0016).
 * ``AUDIT_INSERT_SHORT_SQL`` -- 6-column insert without ``occurred_at``
   or dedup; used by the legacy ``_record_kratos_audit`` path.
 * ``record_audit_async`` -- typed wrapper around ``AUDIT_INSERT_SQL`` for
-  callers that prefer a function over raw SQL (used by journalctl).
+  callers that prefer a function over raw SQL (used by gubbi).
 * ``VALID_ACTOR_TYPES`` -- the four values the CHECK constraint on
   ``audit_log.actor_type`` accepts.
 
-Schema ownership lives in journalctl's Alembic chain. Any change to
+Schema ownership lives in gubbi's Alembic chain. Any change to
 column names or NOT NULL constraints must update the SQL constants here
 and bump this package's major version.
 
@@ -47,7 +47,7 @@ __all__ = [
 
 
 # Values the audit_log.actor_type CHECK constraint accepts. Must stay in
-# sync with journalctl's migration 0012 CHECK definition.
+# sync with gubbi's migration 0012 CHECK definition.
 VALID_ACTOR_TYPES: frozenset[str] = frozenset(
     {
         "user",
@@ -58,7 +58,7 @@ VALID_ACTOR_TYPES: frozenset[str] = frozenset(
 )
 
 
-# Canonical 9-column insert. Used by journalctl's ``record_audit``.
+# Canonical 9-column insert. Used by gubbi's ``record_audit``.
 AUDIT_INSERT_SQL: str = textwrap.dedent(
     """\
     INSERT INTO audit_log
@@ -79,7 +79,7 @@ AUDIT_INSERT_SHORT_SQL: str = textwrap.dedent(
 
 
 # Atomic dedup for ``identity.updated`` re-deliveries. The partial unique
-# index ``audit_log_content_hash_uidx`` (journalctl migration 0016) on
+# index ``audit_log_content_hash_uidx`` (gubbi migration 0016) on
 # ``(target_id, action, metadata->>'content_hash') WHERE metadata ?
 # 'content_hash'`` enforces the constraint at the DB layer; this INSERT
 # returns no rows on conflict, signaling the caller that the audit row

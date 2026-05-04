@@ -3,7 +3,7 @@
 Threat model
 ------------
 The public-facing gateway (cloud-api) authenticates the end user, then
-forwards the request to an internal upstream (journalctl) over a private
+forwards the request to an internal upstream (gubbi) over a private
 network. The upstream cannot re-run the user's OAuth flow, so it trusts
 the gateway-supplied identity headers (``X-Auth-User``, ``X-Auth-Scopes``).
 A shared secret signs those headers plus method + path + a timestamp so

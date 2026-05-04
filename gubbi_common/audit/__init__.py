@@ -1,4 +1,4 @@
-"""Audit log primitives shared by journalctl and journalctl-cloud."""
+"""Audit log primitives shared by gubbi and gubbi-cloud."""
 
 from gubbi_common.audit.actions import Action
 

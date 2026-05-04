@@ -1,7 +1,7 @@
 # gubbi-common
 
 Shared contracts (audit, auth, telemetry) consumed by Gubbi packages
-(`journalctl`, `journalctl-cloud`, future siblings).
+(`gubbi`, `gubbi-cloud`, future siblings).
 
 This is intentionally a tiny package. It holds only the cross-package
 definitions that need to stay in sync -- enums, SQL templates, header
@@ -12,7 +12,7 @@ builders, allowlists. Everything else lives in the consuming package.
 Distributed as a git dependency. In a consumer's `pyproject.toml`:
 
 ```toml
-gubbi-common = { git = "ssh://git@github.com/meepolabs/gubbi-common.git", tag = "v0.4.3" }
+gubbi-common = { git = "ssh://git@github.com/meepolabs/gubbi-common.git", tag = "v0.4.4" }
 ```
 
 Pin a tag, not a branch.

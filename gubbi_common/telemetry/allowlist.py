@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Banned attribute keys
 # ---------------------------------------------------------------------------
-# Union of the deny-lists carried by journalctl and journalctl-cloud as of
+# Union of the deny-lists carried by gubbi and gubbi-cloud as of
 # the migration into gubbi-common. Substring matching is applied: any
 # attribute key containing one of these tokens is dropped, UNLESS the key
 # ends with a DERIVATIVE_MODIFIERS suffix (and its base is not in
@@ -133,7 +133,7 @@ def safe_set_attributes(
     :data:`BANNED_KEYS`, modulo :data:`DERIVATIVE_MODIFIERS` exemption)
     are dropped with a WARNING log. Keys outside the per-span allowlist
     are dropped with a DEBUG log. This is the sole entry point for
-    setting span attributes in journalctl and journalctl-cloud -- never
+    setting span attributes in gubbi and gubbi-cloud -- never
     call ``span.set_attribute`` / ``span.set_attributes`` directly.
 
     Parameters
