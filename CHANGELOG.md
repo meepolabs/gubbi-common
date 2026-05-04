@@ -1,8 +1,20 @@
 # Changelog
 
+Each entry below carries a **Consumer impact** line. Skip-able releases
+are still tagged for traceability, but consumers can stay on an older
+tag if they don't need the new surface. See
+[CONTRIBUTING.md#releasing](./CONTRIBUTING.md#releasing) for the
+release-tagging policy: not every commit gets a tag; tags mark stable
+adoption points.
+
 ## 0.4.3 -- 2026-05-03
 
 **Non-breaking (additive + correctness)**
+
+**Consumer impact:** optional -- adopt if you write tenant-deprovisioned
+or tenant-orphaned audit rows, gate billing on email verification, or
+care about IP normalisation in audit_log. Self-hosters with no Stripe
+flow do not need this.
 
 ### Added
 

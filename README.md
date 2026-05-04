@@ -12,10 +12,23 @@ builders, allowlists. Everything else lives in the consuming package.
 Distributed as a git dependency. In a consumer's `pyproject.toml`:
 
 ```toml
-gubbi-common = { git = "ssh://git@github.com/meepolabs/gubbi-common.git", tag = "v0.1.0" }
+gubbi-common = { git = "ssh://git@github.com/meepolabs/gubbi-common.git", tag = "v0.4.3" }
 ```
 
-Pin a tag, not a branch. Bump the tag when the contract changes.
+Pin a tag, not a branch.
+
+### When to bump the pinned tag
+
+Bump only when you need something the new tag introduces -- a new Action
+constant, a contract fix, a security patch. Tags mark stable adoption
+points, not every commit. If your consumer works correctly on the tag
+you're on and you don't need any of the new surface, **stay there**.
+Skipping releases is a feature.
+
+Each CHANGELOG entry carries a `Consumer impact:` line stating whether
+the upgrade is required, optional, or internal-only. See
+[CONTRIBUTING.md#releasing](./CONTRIBUTING.md#releasing) for the
+release-tagging policy.
 
 ## Modules
 
