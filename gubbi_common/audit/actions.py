@@ -1,9 +1,9 @@
 """Canonical ``Action`` constants for the cross-repo ``audit_log`` table.
 
-The ``audit_log`` table is owned by journalctl. Both journalctl and
-journalctl-cloud write rows into it. Before this module existed, the
+The ``audit_log`` table is owned by gubbi. Both gubbi and
+gubbi-cloud write rows into it. Before this module existed, the
 ``Action`` enum was duplicated in each repo with no drift guard
-(M3-review finding 3.3, CRITICAL): a rename in journalctl would let
+(M3-review finding 3.3, CRITICAL): a rename in gubbi would let
 cloud-api keep writing the old string and silently break downstream
 queries.
 
@@ -34,7 +34,7 @@ class Action:
     # Identity lifecycle
     # ---------------------------------------------------------------
     # Namespaced ``identity.*`` so downstream queries can filter every
-    # identity-shaped event with ``action LIKE 'identity.%'``. journalctl
+    # identity-shaped event with ``action LIKE 'identity.%'``. gubbi
     # Alembic migration 0015 rewrites legacy ``user.*`` rows from M2 to
     # the ``identity.*`` namespace.
     IDENTITY_CREATED: Final = "identity.created"
@@ -84,6 +84,9 @@ class Action:
     ENTRY_DELETED: Final = "entry.deleted"
     TOPIC_CREATED: Final = "topic.created"
     CONVERSATION_SAVED: Final = "conversation.saved"
+    # Emitted by the extraction worker when a conversation finishes
+    # processing (entries created, tags applied, processed_at stamped).
+    CONVERSATION_EXTRACTED: Final = "conversation.extracted"
 
     # ---------------------------------------------------------------
     # Privileged operations
@@ -108,16 +111,16 @@ class Action:
 _CLOUD_REFERENCED: frozenset[str] = frozenset(
     {
         # --- Currently wired in cloud-api production + test code ---
-        "billing.email_unverified_blocked",  # journalctl-cloud/routers/billing.py
-        "client.deleted",  # journalctl-cloud/admin/test_cleanup.py
-        "identity.deleted",  # journalctl-cloud/webhooks/kratos.py
-        "identity.updated",  # journalctl-cloud/webhooks/kratos.py
-        "login_failed",  # journalctl-cloud/webhooks/kratos.py
-        "subscription.canceled",  # journalctl-cloud/webhooks/stripe.py
-        "subscription.created",  # journalctl-cloud/webhooks/stripe.py
-        "subscription.updated",  # journalctl-cloud/webhooks/stripe.py
-        "tenant.provisioned",  # journalctl-cloud/webhooks/kratos.py
-        "user.deleted",  # journalctl-cloud/admin/test_cleanup.py
+        "billing.email_unverified_blocked",  # gubbi-cloud/routers/billing.py
+        "client.deleted",  # gubbi-cloud/admin/test_cleanup.py
+        "identity.deleted",  # gubbi-cloud/webhooks/kratos.py
+        "identity.updated",  # gubbi-cloud/webhooks/kratos.py
+        "login_failed",  # gubbi-cloud/webhooks/kratos.py
+        "subscription.canceled",  # gubbi-cloud/webhooks/stripe.py
+        "subscription.created",  # gubbi-cloud/webhooks/stripe.py
+        "subscription.updated",  # gubbi-cloud/webhooks/stripe.py
+        "tenant.provisioned",  # gubbi-cloud/webhooks/kratos.py
+        "user.deleted",  # gubbi-cloud/admin/test_cleanup.py
         # --- Cloud-side actions defined here, not yet wired in cloud code ---
         # Drift-guard accepts these as cloud-domain values whose wiring is in
         # flight or planned. Promote a comment to "wired in <file>" when each
@@ -133,16 +136,17 @@ _CLOUD_REFERENCED: frozenset[str] = frozenset(
     }
 )
 
-_JOURNALCTL_REFERENCED: frozenset[str] = frozenset(
+_GUBBI_REFERENCED: frozenset[str] = frozenset(
     {
-        # --- Currently wired in journalctl code ---
-        "conversation.saved",  # journalctl/core/audit_decorator.py (ACTION_CONVERSATION_SAVED)
-        "entry.created",  # journalctl/core/audit_decorator.py (ACTION_ENTRY_CREATED)
-        "entry.deleted",  # journalctl/core/audit_decorator.py (ACTION_ENTRY_DELETED)
-        "entry.updated",  # journalctl/core/audit_decorator.py (ACTION_ENTRY_UPDATED)
-        "encryption.key_rotated",  # journalctl/scripts/rotate_encryption_key.py
-        "identity.created",  # journalctl/users/bootstrap.py
-        "identity.deleted",  # journalctl/audit.py
-        "topic.created",  # journalctl/core/audit_decorator.py (ACTION_TOPIC_CREATED)
+        # --- Currently wired in gubbi code ---
+        "conversation.saved",  # gubbi/core/audit_decorator.py (ACTION_CONVERSATION_SAVED)
+        "conversation.extracted",  # gubbi/extraction/jobs/extract_conversation.py
+        "entry.created",  # gubbi/core/audit_decorator.py (ACTION_ENTRY_CREATED)
+        "entry.deleted",  # gubbi/core/audit_decorator.py (ACTION_ENTRY_DELETED)
+        "entry.updated",  # gubbi/core/audit_decorator.py (ACTION_ENTRY_UPDATED)
+        "encryption.key_rotated",  # gubbi/scripts/rotate_encryption_key.py
+        "identity.created",  # gubbi/users/bootstrap.py
+        "identity.deleted",  # gubbi/audit.py
+        "topic.created",  # gubbi/core/audit_decorator.py (ACTION_TOPIC_CREATED)
     }
 )

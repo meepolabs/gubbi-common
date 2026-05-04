@@ -1,4 +1,4 @@
-"""Telemetry primitives shared by journalctl and journalctl-cloud."""
+"""Telemetry primitives shared by gubbi and gubbi-cloud."""
 
 from gubbi_common.telemetry.allowlist import (
     BANNED_KEYS,
