@@ -94,3 +94,36 @@ def test_no_duplicate_action_values() -> None:
         if not name.startswith("_") and isinstance(getattr(Action, name), str)
     ]
     assert len(values) == len(set(values)), f"duplicate Action values: {values}"
+
+
+@pytest.mark.unit
+def test_all_action_values_referenced_by_consumers() -> None:
+    """Every Action string value must appear in at least one consumer registry.
+
+    This is a drift guard: if a contributor renames or removes an Action constant,
+    or if a consumer drops its reference to a value, this test fires until the
+    registries are updated to reflect reality.
+    """
+    from gubbi_common.audit.actions import (
+        _CLOUD_REFERENCED,
+        _JOURNALCTL_REFERENCED,
+        Action,
+    )
+
+    referenced = _CLOUD_REFERENCED | _JOURNALCTL_REFERENCED
+    missing: list[str] = []
+    for attr_name in sorted(dir(Action)):
+        if attr_name.startswith("_"):
+            continue
+        value = getattr(Action, attr_name)
+        assert isinstance(
+            value, str
+        ), f"Action.{attr_name} must be a string, got {type(value).__name__}"
+        if value not in referenced:
+            missing.append(f"{attr_name}={value!r}")
+
+    assert not missing, (
+        "The following Action constants are not found in any consumer registry. "
+        "Add them to _CLOUD_REFERENCED or _JOURNALCTL_REFERENCED if they are currently used, "
+        "or remove them from Action if they are dead:\n" + "\n".join(f"  - {m}" for m in missing)
+    )
