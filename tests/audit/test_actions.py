@@ -26,6 +26,8 @@ def test_tenant_lifecycle_values_present() -> None:
     assert Action.TENANT_PROVISIONED == "tenant.provisioned"
     assert Action.TENANT_SUSPENDED == "tenant.suspended"
     assert Action.TENANT_REACTIVATED == "tenant.reactivated"
+    assert Action.TENANT_DEPROVISIONED == "tenant.deprovisioned"
+    assert Action.TENANT_ORPHANED == "tenant.orphaned"
 
 
 @pytest.mark.unit
@@ -39,6 +41,11 @@ def test_subscription_lifecycle_values_present() -> None:
     assert Action.SUBSCRIPTION_UPDATED == "subscription.updated"
     assert Action.SUBSCRIPTION_CANCELED == "subscription.canceled"
     assert Action.SUBSCRIPTION_OVERRIDE == "subscription.override"
+
+
+@pytest.mark.unit
+def test_billing_gate_values_present() -> None:
+    assert Action.BILLING_EMAIL_UNVERIFIED_BLOCKED == "billing.email_unverified_blocked"
 
 
 @pytest.mark.unit

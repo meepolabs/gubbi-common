@@ -48,6 +48,11 @@ class Action:
     TENANT_PROVISIONED: Final = "tenant.provisioned"
     TENANT_SUSPENDED: Final = "tenant.suspended"
     TENANT_REACTIVATED: Final = "tenant.reactivated"
+    TENANT_DEPROVISIONED: Final = "tenant.deprovisioned"
+    # Emitted when a tenant row is orphaned (user_id set to NULL via
+    # ON DELETE SET NULL on the tenants.user_id FK). See cloud-api
+    # migration 0008 (m-real-bugs-cloud / M-3.2).
+    TENANT_ORPHANED: Final = "tenant.orphaned"
 
     # ---------------------------------------------------------------
     # Auth events
@@ -61,6 +66,15 @@ class Action:
     SUBSCRIPTION_UPDATED: Final = "subscription.updated"
     SUBSCRIPTION_CANCELED: Final = "subscription.canceled"
     SUBSCRIPTION_OVERRIDE: Final = "subscription.override"
+
+    # ---------------------------------------------------------------
+    # Billing gates
+    # ---------------------------------------------------------------
+    # Emitted when a billing operation (checkout, portal link) is
+    # blocked because the user's email is not yet verified. See H-13
+    # backlog: cloud-api previously used the raw literal string
+    # "billing.email_unverified_blocked" pending this enum entry.
+    BILLING_EMAIL_UNVERIFIED_BLOCKED: Final = "billing.email_unverified_blocked"
 
     # ---------------------------------------------------------------
     # Journal content operations

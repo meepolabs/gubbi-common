@@ -200,3 +200,71 @@ async def test_record_audit_async_defaults_metadata_to_empty_dict() -> None:
     )
     _, *args = conn.calls[0]
     assert args[6] == "{}"
+
+
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_record_audit_async_normalizes_ipv6_zero_compression() -> None:
+    """IPv6 with explicit zero blocks is collapsed to canonical form."""
+    conn = _StubConn()
+    await record_audit_async(
+        conn,  # type: ignore[arg-type]
+        actor_type="user",
+        actor_id="x",
+        action="login_failed",
+        ip_address="2001:0db8:0000:0000:0000:0000:0000:0001",
+    )
+    _, *args = conn.calls[0]
+    # ip_address is positional arg index 7 (0-based) per the canonical INSERT
+    assert args[7] == "2001:db8::1"
+
+
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_record_audit_async_normalizes_ipv4_mapped_ipv6() -> None:
+    """IPv4-mapped IPv6 collapses to bare IPv4 so dedup works across reps."""
+    conn = _StubConn()
+    await record_audit_async(
+        conn,  # type: ignore[arg-type]
+        actor_type="user",
+        actor_id="x",
+        action="login_failed",
+        ip_address="::ffff:127.0.0.1",
+    )
+    _, *args = conn.calls[0]
+    assert args[7] == "127.0.0.1"
+
+
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_record_audit_async_rejects_scoped_ipv6() -> None:
+    """Scoped IPv6 (fe80::1%eth0) is rejected -- zone IDs are originator-local
+    and may carry control chars that poison log pipelines."""
+    conn = _StubConn()
+    with pytest.raises(ValueError, match="scoped IPv6"):
+        await record_audit_async(
+            conn,  # type: ignore[arg-type]
+            actor_type="user",
+            actor_id="x",
+            action="login_failed",
+            ip_address="fe80::1%eth0",
+        )
+    assert conn.calls == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_record_audit_async_invalid_ip_chains_cause() -> None:
+    """ValueError raised on bad IP must preserve the original exception via __cause__."""
+    conn = _StubConn()
+    with pytest.raises(ValueError, match="invalid ip_address") as excinfo:
+        await record_audit_async(
+            conn,  # type: ignore[arg-type]
+            actor_type="user",
+            actor_id="x",
+            action="login_failed",
+            ip_address="not-an-ip",
+        )
+    cause = excinfo.value.__cause__
+    assert cause is not None, "ValueError must chain the original cause via 'from exc'"
+    assert isinstance(cause, ValueError)
