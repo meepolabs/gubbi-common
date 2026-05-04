@@ -97,3 +97,52 @@ class Action:
     # ---------------------------------------------------------------
     USER_DELETED: Final = "user.deleted"
     CLIENT_DELETED: Final = "client.deleted"
+
+
+# Consumer reference registries, updated from the actual consumer repos.
+# Each list contains every Action string value currently referenced in that
+# repo's source tree (production AND test files). The test
+# `test_all_action_values_referenced_by_consumers` in tests/audit/test_actions.py
+# asserts that every Action constant appears in at least one registry,
+# serving as a drift guard for the canonical Action values.
+_CLOUD_REFERENCED: frozenset[str] = frozenset(
+    {
+        # --- Currently wired in cloud-api production + test code ---
+        "billing.email_unverified_blocked",  # journalctl-cloud/routers/billing.py
+        "client.deleted",  # journalctl-cloud/admin/test_cleanup.py
+        "identity.deleted",  # journalctl-cloud/webhooks/kratos.py
+        "identity.updated",  # journalctl-cloud/webhooks/kratos.py
+        "login_failed",  # journalctl-cloud/webhooks/kratos.py
+        "subscription.canceled",  # journalctl-cloud/webhooks/stripe.py
+        "subscription.created",  # journalctl-cloud/webhooks/stripe.py
+        "subscription.updated",  # journalctl-cloud/webhooks/stripe.py
+        "tenant.provisioned",  # journalctl-cloud/webhooks/kratos.py
+        "user.deleted",  # journalctl-cloud/admin/test_cleanup.py
+        # --- Cloud-side actions defined here, not yet wired in cloud code ---
+        # Drift-guard accepts these as cloud-domain values whose wiring is in
+        # flight or planned. Promote a comment to "wired in <file>" when each
+        # lands; demote / remove if a planned action is dropped.
+        "admin.query_executed",  # planned cloud admin endpoint
+        "identity.restored",  # planned cloud kratos webhook (un-soft-delete)
+        "secret.rotated",  # planned cloud secret-rotation surface
+        "subscription.override",  # cloud-side deprecated alias for subscription.updated
+        "tenant.deprovisioned",  # in flight via tenant-audit task (kratos.py)
+        "tenant.orphaned",  # in flight via tenant-audit task (kratos.py)
+        "tenant.reactivated",  # planned cloud tenant lifecycle
+        "tenant.suspended",  # planned cloud tenant lifecycle
+    }
+)
+
+_JOURNALCTL_REFERENCED: frozenset[str] = frozenset(
+    {
+        # --- Currently wired in journalctl code ---
+        "conversation.saved",  # journalctl/core/audit_decorator.py (ACTION_CONVERSATION_SAVED)
+        "entry.created",  # journalctl/core/audit_decorator.py (ACTION_ENTRY_CREATED)
+        "entry.deleted",  # journalctl/core/audit_decorator.py (ACTION_ENTRY_DELETED)
+        "entry.updated",  # journalctl/core/audit_decorator.py (ACTION_ENTRY_UPDATED)
+        "encryption.key_rotated",  # journalctl/scripts/rotate_encryption_key.py
+        "identity.created",  # journalctl/users/bootstrap.py
+        "identity.deleted",  # journalctl/audit.py
+        "topic.created",  # journalctl/core/audit_decorator.py (ACTION_TOPIC_CREATED)
+    }
+)

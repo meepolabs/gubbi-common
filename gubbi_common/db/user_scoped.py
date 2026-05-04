@@ -54,6 +54,8 @@ async def user_scoped_connection(
         ) from exc
     if user_id is None:
         raise MissingUserIdError("user_scoped_connection requires a user_id -- received None")
+    # PEP 563 makes annotations strings at runtime, but isinstance() args are
+    # evaluated normally (UUID is a class, not a string annotation here).
     if not isinstance(user_id, UUID):
         raise TypeError(f"user_id must be UUID, got {type(user_id).__name__}")
     ef_search = int(hnsw_ef_search)

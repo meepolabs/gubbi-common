@@ -77,6 +77,18 @@ def test_valid_actor_types_set() -> None:
     assert frozenset({"user", "admin", "system", "hydra_subject"}) == VALID_ACTOR_TYPES
 
 
+# TODO(m234-low): VALID_ACTOR_TYPES <-> DB CHECK constraint sync test.
+# The audit_log.actor_type CHECK constraint is defined in consumer migrations
+# (journalctl Alembic migration 0012), NOT emitted from gubbi_common/audit/sql.py.
+# Until the library either:
+#   1.) emits the DDL string, or
+#   2.) provides a helper that reads the constraint from the running schema,
+# there is no reliable way to parse it at test time.  The best we can do
+# today is maintain a comment in each consumer migration pointing here and
+# an assertion on the Python values (above).  Revisit when gubbi-common owns
+# a source of truth for the CHECK constraint definition.
+
+
 # ---------------------------------------------------------------------------
 # record_audit_async signature + behaviour (using a stub asyncpg conn)
 # ---------------------------------------------------------------------------

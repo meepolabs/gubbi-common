@@ -20,12 +20,17 @@ This module exposes:
 Schema ownership lives in journalctl's Alembic chain. Any change to
 column names or NOT NULL constraints must update the SQL constants here
 and bump this package's major version.
+
+SQL string constants use textwrap.dedent() so the first line of the SQL
+body has no leading whitespace -- this ensures stable fingerprints in
+pg_stat_statements across all consumers.
 """
 
 from __future__ import annotations
 
 import ipaddress
 import json
+import textwrap
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -54,21 +59,23 @@ VALID_ACTOR_TYPES: frozenset[str] = frozenset(
 
 
 # Canonical 9-column insert. Used by journalctl's ``record_audit``.
-AUDIT_INSERT_SQL: str = """
+AUDIT_INSERT_SQL: str = textwrap.dedent(
+    """\
     INSERT INTO audit_log
         (actor_type, actor_id, action, target_type, target_id,
          reason, metadata, ip_address, user_agent)
-    VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::inet, $9)
-"""
+    VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::inet, $9)"""
+)
 
 
 # 6-column insert without ``occurred_at`` or dedup. Used by the legacy
 # ``_record_kratos_audit`` path (identity.updated / identity.deleted).
-AUDIT_INSERT_SHORT_SQL: str = """
+AUDIT_INSERT_SHORT_SQL: str = textwrap.dedent(
+    """\
     INSERT INTO audit_log
         (actor_type, actor_id, action, target_type, target_id, metadata)
-    VALUES ($1, $2, $3, $4, $5, $6::jsonb)
-"""
+    VALUES ($1, $2, $3, $4, $5, $6::jsonb)"""
+)
 
 
 # Atomic dedup for ``identity.updated`` re-deliveries. The partial unique
@@ -77,24 +84,26 @@ AUDIT_INSERT_SHORT_SQL: str = """
 # 'content_hash'`` enforces the constraint at the DB layer; this INSERT
 # returns no rows on conflict, signaling the caller that the audit row
 # was already written.
-AUDIT_INSERT_DEDUPED_SQL: str = """
+AUDIT_INSERT_DEDUPED_SQL: str = textwrap.dedent(
+    """\
     INSERT INTO audit_log
         (actor_type, actor_id, action, target_type, target_id, metadata)
     VALUES ($1, $2, $3, $4, $5, $6::jsonb)
     ON CONFLICT (target_id, action, (metadata->>'content_hash'))
         WHERE metadata ? 'content_hash'
     DO NOTHING
-    RETURNING 1
-"""
+    RETURNING 1"""
+)
 
 
 # Richer audit insert -- includes occurred_at for events that need to
 # record the wire timestamp distinct from server now().
-AUDIT_INSERT_SQL_RICH: str = """
+AUDIT_INSERT_SQL_RICH: str = textwrap.dedent(
+    """\
     INSERT INTO audit_log
         (actor_type, actor_id, action, target_type, target_id, occurred_at, metadata)
-    VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
-"""
+    VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)"""
+)
 
 
 async def record_audit_async(
