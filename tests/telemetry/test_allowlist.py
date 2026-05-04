@@ -101,6 +101,18 @@ def test_banned_key_exact_match_dropped(banned_key: str) -> None:
 
 
 @pytest.mark.unit
+def test_v043_pii_tokens_present_in_banned_keys() -> None:
+    """v0.4.3 added modern PII tokens; future removal would silently regress.
+
+    Each of these covers a distinct PII surface: phone numbers, postal/email
+    addresses, LLM prompt/completion text fields. Removal would re-open the
+    PII leak vector.
+    """
+    for token in ("phone", "address", "prompt", "completion", "response_text"):
+        assert token in BANNED_KEYS, f"BANNED_KEYS missing v0.4.3 token: {token!r}"
+
+
+@pytest.mark.unit
 def test_banned_substring_in_key_dropped() -> None:
     """Keys containing a banned token as substring (no derivative suffix) are dropped."""
     allowlist = {"test.span": frozenset({"email_leak", "badcontent", "good"})}

@@ -155,14 +155,31 @@ async def record_audit_async(
             f"Invalid actor_type {actor_type!r}. " f"Must be one of: {sorted(VALID_ACTOR_TYPES)}"
         )
 
+    # Validate AND normalize the IP. Three rules collapse near-duplicate
+    # representations so audit forensics dedupe correctly:
+    #   1. IPv4-mapped IPv6 ("::ffff:127.0.0.1") -> bare IPv4 ("127.0.0.1")
+    #   2. IPv6 zero-compression ("2001:0db8:0:0:0:0:0:1" -> "2001:db8::1")
+    #   3. Scoped IPv6 ("fe80::1%eth0") rejected -- zone IDs identify the
+    #      originator's local interface, not a cross-machine address, and
+    #      can carry control chars that poison log pipelines.
+    normalized_ip: str | None = None
     if ip_address:
         try:
-            ipaddress.ip_address(ip_address)
-        except ValueError:
+            ip_obj = ipaddress.ip_address(ip_address)
+        except ValueError as exc:
             raise ValueError(
                 f"record_audit_async: invalid ip_address {ip_address!r}; "
                 "must be a valid IPv4 or IPv6 address"
-            ) from None
+            ) from exc
+        if isinstance(ip_obj, ipaddress.IPv6Address):
+            if ip_obj.scope_id is not None:
+                raise ValueError(
+                    f"record_audit_async: scoped IPv6 ip_address {ip_address!r} "
+                    "rejected -- zone IDs are originator-local and not stored"
+                )
+            if ip_obj.ipv4_mapped is not None:
+                ip_obj = ip_obj.ipv4_mapped
+        normalized_ip = str(ip_obj)
 
     resolved_metadata: dict[str, Any] = metadata if metadata is not None else {}
     metadata_json = json.dumps(resolved_metadata)
@@ -176,6 +193,6 @@ async def record_audit_async(
         target_id,
         reason,
         metadata_json,
-        ip_address,
+        normalized_ip,
         user_agent,
     )

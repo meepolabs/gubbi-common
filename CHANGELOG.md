@@ -1,5 +1,42 @@
 # Changelog
 
+## 0.4.3 -- 2026-05-03
+
+**Non-breaking (additive + correctness)**
+
+### Added
+
+- `Action.TENANT_DEPROVISIONED` (`"tenant.deprovisioned"`) for soft-delete
+  audit symmetry with `TENANT_PROVISIONED`.
+- `Action.TENANT_ORPHANED` (`"tenant.orphaned"`) for the case where a
+  tenant row is orphaned via `ON DELETE SET NULL` on `tenants.user_id`
+  (cloud-api migration 0008 / m-real-bugs-cloud).
+- `Action.BILLING_EMAIL_UNVERIFIED_BLOCKED` (`"billing.email_unverified_blocked"`)
+  -- closes the H-13 follow-up where cloud-api was using the raw
+  literal pending an enum entry.
+- `BANNED_KEYS` adds modern PII tokens: `phone`, `address`, `prompt`,
+  `completion`, `response_text`. Substring-matched, so any attribute
+  containing these tokens is dropped from telemetry spans/metrics.
+- `gubbi_common.db.user_scoped`: module docstring documenting the RLS
+  + HNSW GUC contract; `MIN_HNSW_EF_SEARCH = 1` and
+  `MAX_HNSW_EF_SEARCH = 1000` constants replace inline literals.
+
+### Changed
+
+- `record_audit_async` now normalises `ip_address` before storing.
+  Three rules collapse near-duplicate representations: IPv4-mapped IPv6
+  (`::ffff:127.0.0.1`) is stored as bare IPv4 (`127.0.0.1`); IPv6
+  zero-compression is canonicalised (`2001:0db8::0:1` -> `2001:db8::1`);
+  scoped IPv6 (`fe80::1%eth0`) is rejected with `ValueError` because
+  zone IDs identify the originator's local interface, not a
+  cross-machine address, and can carry control chars that poison log
+  pipelines. The validator already rejected malformed addresses; this
+  adds canonicalisation on the happy path. Existing audit rows are
+  unaffected.
+- `record_audit_async` invalid-IP `ValueError` now uses `from exc`
+  instead of `from None`, preserving the `__cause__` chain for
+  forensic debugging.
+
 ## 0.4.2 -- 2026-05-02
 
 **Non-breaking (additive)**

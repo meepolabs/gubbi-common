@@ -44,14 +44,19 @@ logger = logging.getLogger(__name__)
 # NEVER_EXEMPT_BASES).
 BANNED_KEYS: Final[frozenset[str]] = frozenset(
     {
+        "address",
         "body",
+        "completion",
         "content",
         "email",
         "ip_address",
         "messages",
         "password",
+        "phone",
+        "prompt",
         "query",
         "reasoning",
+        "response_text",
         "search_query",
         "summary",
         "user_agent",
