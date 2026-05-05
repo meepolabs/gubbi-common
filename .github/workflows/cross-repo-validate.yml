@@ -1,0 +1,148 @@
+name: cross-repo-validate
+
+# Validates this PR's gubbi-common against downstream consumers BEFORE merge.
+# This is the gate required by D4: "cross-repo CI infrastructure FIRST, then
+# promote 5 modules ONE-AT-A-TIME validated by cross-repo CI."
+#
+# Secret requirements:
+#   GUBBI_CLOUD_PAT (GitHub personal access token with repo scope) must be
+#   created in the gubbi-common repo Settings > Secrets and variables > Actions.
+#   Without it, the gubbi-cloud matrix entry skips gracefully; the gubbi step
+#   still runs unconditionally and blocks merge on failure.
+
+on:
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate-downstream:
+    name: downstream (${{ matrix.repo }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Fail-soft for gubbi-cloud when the PAT is missing (fork PRs or
+    # unconfigured secret). The gubbi entry never uses fail-soft.
+    continue-on-error: ${{ matrix.cloud && secrets.GUBBI_CLOUD_PAT == '' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - repo: gubbi
+            cloud: false
+          - repo: gubbi-cloud
+            cloud: true
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        ports: ["5432:5432"]
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test_${{ matrix.repo }}
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 8
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: 1.8.5
+          virtualenvs-create: true
+          virtualenvs-in-project: false
+
+      # -- Warn only for gubbi-cloud when PAT is empty -----------------------
+      - name: GUBBI_CLOUD_PAT warning (info)
+        if: matrix.cloud && secrets.GUBBI_CLOUD_PAT == ''
+        run: |
+          echo "::warning::GUBBI_CLOUD_PAT secret is not set -- gubbi-cloud validation will be skipped."
+          echo "Create GUBBI_CLOUD_PAT in repository Settings > Secrets (PAT with repo scope)."
+
+      # -- Checkout downstream repo -------------------------------------------
+      - name: Checkout ${{ matrix.repo }}
+        if: (!matrix.cloud || secrets.GUBBI_CLOUD_PAT != '')
+        uses: actions/checkout@v4
+        with:
+          repository: meepolabs/${{ matrix.repo }}
+          ref: main
+          path: ../${{ matrix.repo }}
+          # gubbi-cloud is private; authenticate with the PAT.
+          token: ${{ secrets.GUBBI_CLOUD_PAT || '' }}
+          persist-credentials: false
+
+      # -- Override gubbi-common git-pin to local path ------------------------
+      # Poetry inline tables are always one line. We match on the line content,
+      # replace it in-place while preserving indentation. No multi-line hacks.
+      - name: Replace gubbi-common dependency
+        if: (!matrix.cloud || secrets.GUBBI_CLOUD_PAT != '')
+        working-directory: ../${{ matrix.repo }}
+        run: |
+          python3 << 'PYEOF'
+          import sys
+
+          pyfile = "pyproject.toml"
+          replacement = (
+              '"gubbi-common" = { path = "../gubbi-common", develop = true,'
+              ' extras = ["db"] }'
+          )
+          changed = False
+          with open(pyfile) as f:
+              lines = f.readlines()
+
+          for i, line in enumerate(lines):
+              if "gubbi-common" in line and ("git =" in line or "git=" in line):
+                  indent = len(line) - len(line.lstrip())
+                  lines[i] = " " * indent + replacement.strip() + "\n"
+                  changed = True
+                  break
+
+          if not changed:
+              print("WARNING: no gubbi-common git-pin found in %s" % pyfile, file=sys.stderr)
+
+          with open(pyfile, "w") as f:
+              f.writelines(lines)
+          PYEOF
+
+      # -- Lock + Install -----------------------------------------------------
+      - name: poetry lock (no-update)
+        if: (!matrix.cloud || secrets.GUBBI_CLOUD_PAT != '')
+        working-directory: ../${{ matrix.repo }}
+        run: poetry lock --no-update
+
+      - name: poetry install
+        if: (!matrix.cloud || secrets.GUBBI_CLOUD_PAT != '')
+        working-directory: ../${{ matrix.repo }}
+        run: poetry install --no-interaction
+
+      # -- Run tests ----------------------------------------------------------
+      # gubbi: full suite minus integration (postgres service is provisioned
+      # for any future expansion that re-enables integration tests here).
+      - name: Run gubbi tests
+        if: '!matrix.cloud'
+        working-directory: ../${{ matrix.repo }}
+        env:
+          POSTGRES_HOST: localhost
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test_${{ matrix.repo }}
+        run: poetry run pytest tests/ -x --ignore=tests/integration
+
+      # gubbi-cloud: narrow unit-only gate for now (start narrow; expand later).
+      - name: Run gubbi-cloud unit tests
+        if: matrix.cloud && secrets.GUBBI_CLOUD_PAT != ''
+        working-directory: ../${{ matrix.repo }}
+        run: poetry run pytest tests/unit/ -x
