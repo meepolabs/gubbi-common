@@ -277,7 +277,10 @@ class StructuredLogFormatter(logging.Formatter):
 # ---------------------------------------------------------------------------
 
 LOG_ROTATE_WHEN: str = os.getenv(key="LOG_ROTATE_WHEN", default="W6")
-LOG_ROTATE_BACKUP: int = int(os.getenv(key="LOG_ROTATE_BACKUP", default="4"))
+try:
+    LOG_ROTATE_BACKUP: int = int(os.getenv(key="LOG_ROTATE_BACKUP", default="4"))
+except ValueError:
+    LOG_ROTATE_BACKUP = 4
 
 
 def _safe_add_logger_name(
@@ -303,7 +306,7 @@ def _safe_add_logger_name(
 
 
 def _add_otel_context(
-    logger: WrappedLogger,
+    _logger: WrappedLogger,
     method: str,
     event_dict: EventDict,
 ) -> EventDict:
@@ -311,6 +314,12 @@ def _add_otel_context(
 
     Reads the current OTel span context and the ``correlation_id``
     context var from this module, adding them to every log event.
+
+    The structlog processor signature requires a ``logger`` first
+    argument, but it can be ``None`` when records arrive via
+    ProcessorFormatter (mirrors the contract handled by
+    ``_safe_add_logger_name``). We deliberately ignore it here -- error
+    diagnostics flow through the module-level ``logger`` instead.
     """
     cid = get_correlation_id()
     if cid is not None:
@@ -329,9 +338,13 @@ def _add_otel_context(
     return event_dict
 
 
-# Lazy-import wrapper so the module loads without opentelemetry installed.
 def trace_get_current_span() -> Any:
-    """Import-only lazy access to OTel's get_current_span."""
+    """Resolve OTel's ``get_current_span`` at call time.
+
+    Test harnesses can monkeypatch ``opentelemetry.trace.get_current_span``
+    without re-importing this module, and call-time lookup picks up the
+    currently-installed tracer provider rather than a snapshot.
+    """
     from opentelemetry import trace
 
     return trace.get_current_span()
@@ -394,8 +407,17 @@ def initialize_logger(logger_name: str, log_dir: str = "logs") -> structlog.stdl
     file_handler.setFormatter(fmt)
 
     # Attach handler directly to root so we bypass basicConfig gating.
+    # Dedupe by absolute filename so successive calls with different
+    # ``logger_name`` / ``log_dir`` each get their own handler instead of
+    # silently inheriting the first call's destination.
+    abs_log_path = os.path.abspath(log_file_path)
     root = logging.getLogger()
-    if not any(isinstance(h, handlers.TimedRotatingFileHandler) for h in root.handlers):
+    existing_paths = {
+        os.path.abspath(h.baseFilename)
+        for h in root.handlers
+        if isinstance(h, handlers.TimedRotatingFileHandler)
+    }
+    if abs_log_path not in existing_paths:
         root.addHandler(file_handler)
 
     root.setLevel(logging.INFO)
