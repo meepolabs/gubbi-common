@@ -10,6 +10,10 @@ from gubbi_common.telemetry.logging import (
     reset_correlation_id,
     set_correlation_id,
 )
+from gubbi_common.telemetry.otel import (
+    configure_otel,
+    get_tracer,
+)
 
 # `_get_otel_ids` remains accessible via explicit
 # `from gubbi_common.telemetry.logging import _get_otel_ids` for tests, but is
@@ -22,4 +26,6 @@ __all__ = [
     "set_correlation_id",
     "reset_correlation_id",
     "get_correlation_id",
+    "configure_otel",
+    "get_tracer",
 ]
