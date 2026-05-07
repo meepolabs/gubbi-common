@@ -7,7 +7,7 @@ from uuid import uuid4
 
 import pytest
 
-from gubbi_common.auth import (
+from gubbi_common.auth.hydra import (
     HydraError,
     HydraInvalidToken,
     HydraUnreachable,
@@ -33,7 +33,7 @@ def _make_claims(
 
 @pytest.mark.unit
 def test_token_claims_construction() -> None:
-    """TokenClaims accepts valid sub(scn), scope, and exp fields."""
+    """TokenClaims accepts valid sub, scope, and exp fields."""
     cid = uuid4()
     claims = TokenClaims(sub=cid, scope="openapi", exp=1700000000)
     assert claims.sub == cid
@@ -113,7 +113,7 @@ def test_all_four_symbols_importable_from_package() -> None:
         TokenClaims,
     )
 
-    assert issubclass(TokenClaims, object)  # dataclass, not an Exception subclass
+    assert not issubclass(TokenClaims, BaseException)  # dataclass, not an Exception subclass
     assert issubclass(HydraError, BaseException)
     assert issubclass(HydraUnreachable, HydraError)
     assert issubclass(HydraInvalidToken, HydraError)
