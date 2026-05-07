@@ -12,15 +12,25 @@ from gubbi_common.auth.gateway_signature import (
     build_signature,
     verify_signature,
 )
+from gubbi_common.auth.hydra import (
+    HydraError,
+    HydraInvalidToken,
+    HydraUnreachable,
+    TokenClaims,
+)
 
 __all__ = [
     "GATEWAY_CONTRACT_VERSION",
-    "MAX_SKEW_SECONDS",
     "FutureSignatureError",
+    "HydraError",
+    "HydraInvalidToken",
+    "HydraUnreachable",
+    "MAX_SKEW_SECONDS",
     "MalformedTimestampError",
     "MismatchedSignatureError",
     "SignatureError",
     "StaleSignatureError",
+    "TokenClaims",
     "build_bearer_challenge",
     "build_signature",
     "verify_signature",

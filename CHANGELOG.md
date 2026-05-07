@@ -7,6 +7,29 @@ tag if they don't need the new surface. See
 release-tagging policy: not every commit gets a tag; tags mark stable
 adoption points.
 
+## 0.6.0 -- 2026-05-06
+
+### Added
+
+- ``gubbi_common.auth.hydra`` module: promoted from gubbi and
+  gubbi-cloud consumer repos. Exports ``TokenClaims`` (frozen dataclass
+  with ``sub: UUID``, ``scope: str``, ``exp: int``) and the Hydra
+  exception hierarchy ``HydraError`` / ``HydraUnreachable`` /
+  ``HydraInvalidToken``. The introspector logic and cache protocol stay
+  per-repo.
+- `HydraError`, `HydraUnreachable`, `HydraInvalidToken` and
+  `TokenClaims` re-exported from the `gubbi_common.auth` package-level
+  ``__init__.py`` alongside existing auth symbols.
+
+**Non-breaking (additive).** No signature changes to any existing public
+API; consumers get new names at read-only cost.
+
+**Consumer impact:** optional adoption. Consumers should migrate away
+from their per-repo copies (`gubbi.auth.hydra` and
+`gubbi_cloud.auth.hydra`) to the canonical import from
+`gubbi_common.auth.hydra`. Upcoming migrations tracked as
+CO.29.2-gubbi and CO.29.2-cloud.
+
 ## 0.5.1 -- 2026-05-06
 
 ### Added
