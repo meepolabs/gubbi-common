@@ -7,7 +7,18 @@ tag if they don't need the new surface. See
 release-tagging policy: not every commit gets a tag; tags mark stable
 adoption points.
 
-## 0.4.4 -- 2026-05-04
+## 0.5.0 -- 2026-05-07
+
+### Added
+
+- New canonical `StructuredLogFormatter` class in ``gubbi_common.telemetry.logging``
+  (promoted from gubbi and gubbi-cloud). Supports both gubbi-shape (default,
+  walk ``record.__dict__``) and cloud-shape (named-attribute lookup via
+  ``attributes_attr_name``) output with a stable JSON schema.
+- Contextvar-based correlation ID helpers (`set_correlation_id`,
+  `get_correlation_id`) exported from ``gubbi_common.telemetry``.
+- Trace/span ID propagation via OpenTelemetry context in the formatter,
+  with fallback to structlog-injected record attributes for cloud consumers.
 
 **Non-breaking (additive + docs)**
 
