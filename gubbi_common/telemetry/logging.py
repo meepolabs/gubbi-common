@@ -8,7 +8,6 @@ Public API::
     StructuredLogFormatter  -- logging.Formatter that emits one JSON line
                                per invocation.
     set_correlation_id / get_correlation_id  -- contextvar helpers.
-    _get_otel_ids  -- (private) read trace/span IDs from OTel context.
 
 Schema (one JSON object per line)::
 
@@ -31,7 +30,11 @@ import logging
 import os
 from contextvars import ContextVar, Token
 from datetime import UTC, datetime
+from logging import handlers
 from typing import Any
+
+import structlog
+from structlog.types import EventDict, WrappedLogger
 
 # ---------------------------------------------------------------------------
 # Correlation ID context var
@@ -80,7 +83,7 @@ def _get_otel_ids() -> tuple[str | None, str | None]:
     try:
         # Import here so gubbi-common works without opentelemetry installed;
         # consumers downstream (gubbi, gubbi-cloud) provide it.
-        from opentelemetry import trace  # type: ignore[import-not-found]
+        from opentelemetry import trace
 
         span = trace.get_current_span()
         span_context = span.get_span_context()
@@ -269,10 +272,161 @@ class StructuredLogFormatter(logging.Formatter):
         return str(record.msg)
 
 
+# ---------------------------------------------------------------------------
+# Shared processors (port of gubbi.core.logger)
+# ---------------------------------------------------------------------------
+
+LOG_ROTATE_WHEN: str = os.getenv(key="LOG_ROTATE_WHEN", default="W6")
+LOG_ROTATE_BACKUP: int = int(os.getenv(key="LOG_ROTATE_BACKUP", default="4"))
+
+
+def _safe_add_logger_name(
+    logger: WrappedLogger,
+    method: str,
+    event_dict: EventDict,
+) -> EventDict:
+    """Like structlog.stdlib.add_logger_name but handles None logger.
+
+    The MCP SDK's internal loggers pass records through the
+    ProcessorFormatter where the logger reference can be None,
+    causing the standard add_logger_name to crash with
+    AttributeError: 'NoneType' object has no attribute 'name'.
+    """
+    record = event_dict.get("_record")
+    if record is not None:
+        event_dict["logger"] = record.name
+    elif logger is not None:
+        event_dict["logger"] = getattr(logger, "name", "unknown")
+    else:
+        event_dict["logger"] = "unknown"
+    return event_dict
+
+
+def _add_otel_context(
+    logger: WrappedLogger,
+    method: str,
+    event_dict: EventDict,
+) -> EventDict:
+    """Enrich log events with correlation_id, trace_id, and span_id.
+
+    Reads the current OTel span context and the ``correlation_id``
+    context var from this module, adding them to every log event.
+    """
+    cid = get_correlation_id()
+    if cid is not None:
+        event_dict["correlation_id"] = cid
+
+    try:
+        span = trace_get_current_span()
+        span_context = span.get_span_context()
+        if span_context and span_context.is_valid:
+            event_dict["trace_id"] = format(span_context.trace_id, "032x")
+            event_dict["span_id"] = format(span_context.span_id, "016x")
+    except Exception:
+        logger.debug("Failed to read OTel span context for log enrichment", exc_info=True)
+
+    event_dict["service"] = os.environ.get("OTEL_SERVICE_NAME", "gubbi")
+    return event_dict
+
+
+# Lazy-import wrapper so the module loads without opentelemetry installed.
+def trace_get_current_span() -> Any:
+    """Import-only lazy access to OTel's get_current_span."""
+    from opentelemetry import trace
+
+    return trace.get_current_span()
+
+
+# Shared processors used by both structlog and ProcessorFormatter
+_SHARED_PROCESSORS: list[structlog.types.Processor] = [
+    _safe_add_logger_name,
+    _add_otel_context,
+    structlog.stdlib.add_log_level,
+    structlog.processors.TimeStamper(fmt="iso"),
+    structlog.processors.StackInfoRenderer(),
+    structlog.processors.UnicodeDecoder(),
+    structlog.processors.JSONRenderer(),
+]
+
+
+def initialize_logger(logger_name: str, log_dir: str = "logs") -> structlog.stdlib.BoundLogger:
+    """Initialize structured logging for the application.
+
+    Sets up a ProcessorFormatter on the file handler so that ALL
+    loggers (both structlog and plain stdlib) produce consistent
+    JSON output.  This means modules can safely use either:
+
+        # Async context (main.py, lifespan):
+        logger = structlog.get_logger("gubbi")
+        logger.info("event", key=value)
+
+        # Sync (storage, oauth):
+        logger = logging.getLogger("gubbi.oauth.login")
+        logger.info("event", extra={"key": value})
+
+    Args:
+        logger_name: Name of the logger and log file.
+        log_dir: Directory for log files.
+
+    Returns:
+        A ``structlog.stdlib.BoundLogger`` (the cached configured logger).
+    """
+    os.makedirs(log_dir, exist_ok=True)
+
+    # File handler with rotation
+    log_file_path = f"{log_dir}/{logger_name}.log"
+    file_handler = handlers.TimedRotatingFileHandler(
+        filename=log_file_path,
+        when=LOG_ROTATE_WHEN,
+        backupCount=LOG_ROTATE_BACKUP,
+        encoding="utf-8",
+    )
+    file_handler.setLevel(logging.INFO)
+
+    # ProcessorFormatter: renders ALL stdlib log records through
+    # structlog processors, producing consistent JSON output
+    fmt = structlog.stdlib.ProcessorFormatter(
+        processors=[
+            structlog.stdlib.ProcessorFormatter.remove_processors_meta,
+            *_SHARED_PROCESSORS,
+        ],
+    )
+    file_handler.setFormatter(fmt)
+
+    # Attach handler directly to root so we bypass basicConfig gating.
+    root = logging.getLogger()
+    if not any(isinstance(h, handlers.TimedRotatingFileHandler) for h in root.handlers):
+        root.addHandler(file_handler)
+
+    root.setLevel(logging.INFO)
+
+    # Configure structlog for async callers (main.py)
+    structlog.configure(
+        processors=[
+            structlog.stdlib.filter_by_level,
+            structlog.contextvars.merge_contextvars,
+            structlog.processors.StackInfoRenderer(),
+            structlog.processors.ExceptionPrettyPrinter(),
+            structlog.processors.UnicodeDecoder(),
+            structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
+        ],
+        wrapper_class=structlog.stdlib.AsyncBoundLogger,
+        logger_factory=structlog.stdlib.LoggerFactory(),
+        cache_logger_on_first_use=True,
+    )
+
+    config = structlog.get_config()
+    return structlog.stdlib.BoundLogger(
+        logging.getLogger(logger_name),
+        config["processors"],
+        config["context_class"](),
+    )
+
+
 __all__ = [
     "StructuredLogFormatter",
     "set_correlation_id",
     "reset_correlation_id",
     "get_correlation_id",
-    "_get_otel_ids",
+    "initialize_logger",
 ]
