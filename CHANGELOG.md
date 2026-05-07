@@ -7,6 +7,45 @@ tag if they don't need the new surface. See
 release-tagging policy: not every commit gets a tag; tags mark stable
 adoption points.
 
+## 0.7.0 -- 2026-05-06
+
+### Added
+
+- ``gubbi_common.middleware.CorrelationIDMiddleware`` -- ASGI middleware
+  promoted from gubbi and gubbi-cloud (CO.29.4). Manages the request
+  ``correlation_id`` contextvar with optional ``echo_header`` and
+  ``span_attribute_setter`` callback parameters. Stays free of FastAPI
+  and OTel coupling -- consumers wire their own attribute allowlist
+  via the callback.
+- ``gubbi_common.telemetry.otel.configure_otel(service_name, endpoint, *,
+  enabled=True)`` and ``get_tracer()`` -- OTel SDK wiring promoted from
+  gubbi-cloud (CO.29.3). Auto-instrumentors stay in consumers (FastAPI,
+  asyncpg, redis, httpx remain per-repo concerns).
+- ``gubbi_common.telemetry.logging.initialize_logger(logger_name,
+  log_dir="logs")`` -- structlog setup promoted from gubbi (CO.29.5).
+  Includes the ``_add_otel_context`` processor that enriches every log
+  event with ``correlation_id``, ``trace_id``, and ``span_id``.
+
+### Changed
+
+- Declared previously-implicit runtime deps in ``pyproject.toml``:
+  ``starlette``, ``structlog``, ``opentelemetry-api``,
+  ``opentelemetry-sdk``, ``opentelemetry-exporter-otlp-proto-grpc``.
+  v0.5.0 and v0.6.0 had a latent gap -- consumers got these
+  transitively via ``fastapi`` / ``opentelemetry-instrumentation-*``,
+  but a fresh ``poetry install`` of ``gubbi-common`` on a clean machine
+  would have failed with ``ModuleNotFoundError``. Closing the gap now.
+- ``_get_otel_ids`` removed from ``gubbi_common.telemetry.logging.__all__``
+  (still importable as a private helper; the leading underscore already
+  signaled non-public status).
+
+**Non-breaking (additive).** No signature changes to any existing
+public API.
+
+**Consumer impact:** optional per-module adoption. Per-repo migrations
+land as Batch 2: CO.29.3-{gubbi,cloud}, CO.29.4-{gubbi,cloud},
+CO.29.5-{gubbi,cloud}. Consumers still on 0.6.x continue to work.
+
 ## 0.6.0 -- 2026-05-06
 
 ### Added
