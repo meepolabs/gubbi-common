@@ -29,7 +29,7 @@ from __future__ import annotations
 import json
 import logging
 import os
-from contextvars import ContextVar
+from contextvars import ContextVar, Token
 from datetime import UTC, datetime
 from typing import Any
 
@@ -42,9 +42,23 @@ _correlation_id_var: ContextVar[str | None] = ContextVar("correlation_id", defau
 logger = logging.getLogger(__name__)
 
 
-def set_correlation_id(cid: str) -> None:
-    """Set the request-scoped correlation_id in context."""
-    _correlation_id_var.set(cid)
+def set_correlation_id(cid: str) -> Token[str | None]:
+    """Set the request-scoped correlation_id in context.
+
+    Returns a ``Token`` that ASGI/scope-bound callers should pass to
+    ``reset_correlation_id`` in a ``finally`` block to restore the prior
+    value, preventing cross-request leakage. Callers that don't need
+    reset semantics may discard the return value.
+    """
+    return _correlation_id_var.set(cid)
+
+
+def reset_correlation_id(token: Token[str | None]) -> None:
+    """Reset the correlation_id ContextVar to its prior value.
+
+    Pair with ``set_correlation_id``; pass the returned ``Token``.
+    """
+    _correlation_id_var.reset(token)
 
 
 def get_correlation_id() -> str | None:
@@ -258,6 +272,7 @@ class StructuredLogFormatter(logging.Formatter):
 __all__ = [
     "StructuredLogFormatter",
     "set_correlation_id",
+    "reset_correlation_id",
     "get_correlation_id",
     "_get_otel_ids",
 ]

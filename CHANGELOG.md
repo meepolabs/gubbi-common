@@ -7,6 +7,23 @@ tag if they don't need the new surface. See
 release-tagging policy: not every commit gets a tag; tags mark stable
 adoption points.
 
+## 0.5.1 -- 2026-05-06
+
+### Added
+
+- `set_correlation_id(cid)` now returns a `contextvars.Token` so ASGI/scope-bound
+  callers can `reset_correlation_id(token)` in a `finally` block to restore the
+  prior value. Prevents cross-request correlation_id leakage without reaching
+  for the private `_correlation_id_var` ContextVar.
+- `reset_correlation_id(token)` exported from `gubbi_common.telemetry`.
+
+**Non-breaking (additive).** Existing callers that ignored
+`set_correlation_id`'s return value continue to work; the prior `-> None`
+return type is widened to `-> Token[str | None]`.
+
+**Consumer impact:** optional. Adopt only if you currently import the private
+`_correlation_id_var` to manage ContextVar reset semantics in middleware.
+
 ## 0.5.0 -- 2026-05-07
 
 ### Added
