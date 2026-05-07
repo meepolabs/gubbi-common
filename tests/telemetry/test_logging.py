@@ -81,7 +81,9 @@ def parse_line(line: str) -> dict[str, Any]:
 @pytest.mark.unit
 def test_default_mode_gubbi_shape() -> None:
     """Default formatter emits correct gubbi-shape with attributes when extras exist."""
-    formatter = StructuredLogFormatter()  # no kwargs
+    # Pass service_name explicitly so the assertion below is deterministic
+    # regardless of OTEL_SERVICE_NAME in the test runner's environment.
+    formatter = StructuredLogFormatter(service_name="gubbi")
     record = _make_record("tool.call", extra_field="hello")
 
     output = formatter.format(record)
@@ -104,7 +106,8 @@ def test_default_mode_gubbi_shape() -> None:
     assert "attributes" in parsed
     assert parsed["attributes"]["extra_field"] == "hello"
 
-    # service defaults to "gubbi" (unless OTEL_SERVICE_NAME is set)
+    # service is asserted explicitly; pass service_name="gubbi" so the test
+    # is deterministic regardless of OTEL_SERVICE_NAME in the runner env.
     assert parsed["service"] == "gubbi"
     assert parsed["level"] == "INFO"
     assert parsed["event"] == "tool.call"
@@ -164,7 +167,7 @@ def test_cloud_mode_emits_attributes_dict() -> None:
 
 @pytest.mark.unit
 def test_cloud_mode_omit_false_always_emits_attributes() -> None:
-    """omission_disabled=False means 'attributes' is always present, even empty."""
+    """omit_empty_attributes=False means 'attributes' is always present, even empty."""
     formatter = StructuredLogFormatter(
         service_name="cloud-api",
         attributes_attr_name="attributes_dict",
@@ -369,23 +372,32 @@ def test_get_otel_ids_invalid_span_fallback() -> None:
 
 @pytest.mark.unit
 def test_telemetry_package_reexports() -> None:
-    """StructuredLogFormatter and helpers accessible from gubbi_common.telemetry."""
+    """Public StructuredLogFormatter and helpers accessible from gubbi_common.telemetry."""
     from gubbi_common.telemetry import (
         StructuredLogFormatter,
-        _get_otel_ids,
         get_correlation_id,
         set_correlation_id,
     )
 
     assert callable(set_correlation_id)
     assert callable(get_correlation_id)
-    assert callable(_get_otel_ids)
     assert isinstance(StructuredLogFormatter(), logging.Formatter)
 
 
 @pytest.mark.unit
+def test_private_helper_not_reexported() -> None:
+    """_get_otel_ids is private; not re-exported from gubbi_common.telemetry package."""
+    import gubbi_common.telemetry as t
+
+    assert not hasattr(t, "_get_otel_ids"), (
+        "_get_otel_ids should remain accessible only via "
+        "gubbi_common.telemetry.logging._get_otel_ids"
+    )
+
+
+@pytest.mark.unit
 def test_public_symbols_in_all() -> None:
-    """__all__ contains all public symbols."""
+    """__all__ contains all public symbols (and excludes private helpers)."""
     from gubbi_common.telemetry import __all__
 
     required = {
@@ -394,9 +406,9 @@ def test_public_symbols_in_all() -> None:
         "StructuredLogFormatter",
         "set_correlation_id",
         "get_correlation_id",
-        "_get_otel_ids",
     }
     assert required.issubset(set(__all__)), f"missing from __all__: {required - set(__all__)}"
+    assert "_get_otel_ids" not in __all__, "_get_otel_ids must not appear in __all__"
 
 
 # ---------------------------------------------------------------------------

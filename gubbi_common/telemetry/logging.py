@@ -105,6 +105,10 @@ _STDLIB_RECORD_FIELDS: frozenset[str] = frozenset(
         "threadName",
         "processName",
         "process",
+        # Injected by Formatter.format() / Formatter.formatTime() when an
+        # earlier handler/formatter runs on the same record before us.
+        "message",
+        "asctime",
         # Python 3.14+ adds taskName (asyncio task context)
         "taskName",
     }
@@ -168,17 +172,22 @@ class StructuredLogFormatter(logging.Formatter):
         """Format the log record as a single JSON line."""
         timestamp = datetime.fromtimestamp(record.created, tz=UTC).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
-        # Correlation/trace fallback chain: check record attrs first, then
-        # contextvar / OTel.  This lets both gubbi (contextvar-driven) and
-        # cloud (structlog-injected attrs) consumers work without extra kwargs.
-        cid = getattr(record, "correlation_id", None) or get_correlation_id()
+        # Correlation/trace fallback chain: check record attrs first (only
+        # falling back when the attr is literally missing or None), then
+        # contextvar / OTel. Truthiness fallback (`or`) would treat an
+        # intentionally provided empty string as missing; we use explicit
+        # `is None` checks instead so callers retain control over empty
+        # values. This lets both gubbi (contextvar-driven) and cloud
+        # (structlog-injected attrs) consumers work without extra kwargs.
+        rec_cid = getattr(record, "correlation_id", None)
+        cid = rec_cid if rec_cid is not None else get_correlation_id()
 
         rec_tid = getattr(record, "trace_id", None)
         rec_sid = getattr(record, "span_id", None)
         if rec_tid is None or rec_sid is None:
             ctx_tid, ctx_sid = _get_otel_ids()
-            tid = rec_tid or ctx_tid
-            sid = rec_sid or ctx_sid
+            tid = rec_tid if rec_tid is not None else ctx_tid
+            sid = rec_sid if rec_sid is not None else ctx_sid
         else:
             tid, sid = rec_tid, rec_sid
 
@@ -194,8 +203,10 @@ class StructuredLogFormatter(logging.Formatter):
                 attributes[key] = value
 
         # Dict-msg interop: copy record.msg dict into attributes under a key.
+        # Take a shallow copy so subsequent mutations to record.msg by the
+        # caller don't retroactively change the formatted output.
         if self._dict_msg_attribute_key is not None and isinstance(record.msg, dict):
-            attributes.setdefault(self._dict_msg_attribute_key, record.msg)
+            attributes.setdefault(self._dict_msg_attribute_key, dict(record.msg))
 
         # Event derivation
         event = self._derive_event(record)
