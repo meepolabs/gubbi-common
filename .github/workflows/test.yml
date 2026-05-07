@@ -39,7 +39,7 @@ jobs:
 
       - name: Install dependencies
         if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
-        run: poetry install --no-interaction --only dev
+        run: poetry install --no-interaction --extras db
 
       - name: ruff check
         run: poetry run ruff check gubbi_common/ tests/
@@ -92,7 +92,7 @@ jobs:
 
       - name: Install dependencies
         if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
-        run: poetry install --no-interaction
+        run: poetry install --no-interaction --extras db
 
       - name: Run pytest
         env:
