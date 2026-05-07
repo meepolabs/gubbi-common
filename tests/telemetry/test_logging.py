@@ -491,8 +491,8 @@ def test_ensure_ascii_false_preserves_unicode() -> None:
 
 
 @pytest.mark.unit
-def test_version_is_060() -> None:
-    """v0.6.0 -- minor bump promoting Hydra data + exception classes to gubbi_common.auth.hydra."""
+def test_version_is_070() -> None:
+    """v0.7.0 -- minor bump promoting CorrelationIDMiddleware, configure_otel, and initialize_logger."""
     import gubbi_common
 
-    assert gubbi_common.__version__ == "0.6.0"
+    assert gubbi_common.__version__ == "0.7.0"
