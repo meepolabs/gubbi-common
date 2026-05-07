@@ -6,16 +6,18 @@ from gubbi_common.telemetry.allowlist import (
 )
 from gubbi_common.telemetry.logging import (
     StructuredLogFormatter,
-    _get_otel_ids,
     get_correlation_id,
     set_correlation_id,
 )
 
+# `_get_otel_ids` remains accessible via explicit
+# `from gubbi_common.telemetry.logging import _get_otel_ids` for tests, but is
+# not re-exported from this package nor listed in `__all__` because the
+# leading underscore signals it as a private helper.
 __all__ = [
     "BANNED_KEYS",
     "safe_set_attributes",
     "StructuredLogFormatter",
     "set_correlation_id",
     "get_correlation_id",
-    "_get_otel_ids",
 ]

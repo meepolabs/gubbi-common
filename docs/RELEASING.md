@@ -10,7 +10,7 @@ gubbi-cloud may lag gubbi-common by up to 1 minor version; gubbi follows latest.
 
 ## Release procedure (manual until automated)
 
-1. Bump version in `gubbi-common/pyproject.toml`.
+1. Bump version in `pyproject.toml` (root of this repo).
 2. Update `CHANGELOG.md` with changes.
 3. Commit `chore(release): vX.Y.Z`, tag `vX.Y.Z`, push tag.
 4. Open PRs in `gubbi/` and `gubbi-cloud/` updating their `gubbi-common`
