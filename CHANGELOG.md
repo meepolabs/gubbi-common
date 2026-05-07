@@ -24,7 +24,7 @@ return type is widened to `-> Token[str | None]`.
 **Consumer impact:** optional. Adopt only if you currently import the private
 `_correlation_id_var` to manage ContextVar reset semantics in middleware.
 
-## 0.5.0 -- 2026-05-07
+## 0.5.0 -- 2026-05-06
 
 ### Added
 
