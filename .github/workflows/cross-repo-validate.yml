@@ -23,9 +23,13 @@ jobs:
     name: downstream (${{ matrix.repo }})
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    # Fail-soft for gubbi-cloud when the PAT is missing (fork PRs or
-    # unconfigured secret). The gubbi entry never uses fail-soft.
-    continue-on-error: ${{ matrix.cloud && secrets.GUBBI_CLOUD_PAT == '' }}
+    # The `secrets` context is not available in step-level `if` conditions
+    # (only in `env`, `with`, `run`). Mirror the secret into a job-level env
+    # var so the gubbi-cloud-specific guards can read it via `env`. When the
+    # PAT is missing, every gubbi-cloud step skips via its own guard,
+    # leaving only the warning step to run.
+    env:
+      GUBBI_CLOUD_PAT: ${{ secrets.GUBBI_CLOUD_PAT }}
     strategy:
       fail-fast: false
       matrix:
@@ -67,14 +71,14 @@ jobs:
 
       # -- Warn only for gubbi-cloud when PAT is empty -----------------------
       - name: GUBBI_CLOUD_PAT warning (info)
-        if: matrix.cloud && secrets.GUBBI_CLOUD_PAT == ''
+        if: matrix.cloud && env.GUBBI_CLOUD_PAT == ''
         run: |
           echo "::warning::GUBBI_CLOUD_PAT secret is not set -- gubbi-cloud validation will be skipped."
           echo "Create GUBBI_CLOUD_PAT in repository Settings > Secrets (PAT with repo scope)."
 
       # -- Checkout downstream repo -------------------------------------------
       - name: Checkout ${{ matrix.repo }}
-        if: (!matrix.cloud || secrets.GUBBI_CLOUD_PAT != '')
+        if: (!matrix.cloud || env.GUBBI_CLOUD_PAT != '')
         uses: actions/checkout@v4
         with:
           repository: meepolabs/${{ matrix.repo }}
@@ -88,7 +92,7 @@ jobs:
       # Poetry inline tables are always one line. We match on the line content,
       # replace it in-place while preserving indentation. No multi-line hacks.
       - name: Replace gubbi-common dependency
-        if: (!matrix.cloud || secrets.GUBBI_CLOUD_PAT != '')
+        if: (!matrix.cloud || env.GUBBI_CLOUD_PAT != '')
         working-directory: ../${{ matrix.repo }}
         run: |
           python3 << 'PYEOF'
@@ -119,12 +123,12 @@ jobs:
 
       # -- Lock + Install -----------------------------------------------------
       - name: poetry lock (no-update)
-        if: (!matrix.cloud || secrets.GUBBI_CLOUD_PAT != '')
+        if: (!matrix.cloud || env.GUBBI_CLOUD_PAT != '')
         working-directory: ../${{ matrix.repo }}
         run: poetry lock --no-update
 
       - name: poetry install
-        if: (!matrix.cloud || secrets.GUBBI_CLOUD_PAT != '')
+        if: (!matrix.cloud || env.GUBBI_CLOUD_PAT != '')
         working-directory: ../${{ matrix.repo }}
         run: poetry install --no-interaction
 
@@ -143,6 +147,6 @@ jobs:
 
       # gubbi-cloud: narrow unit-only gate for now (start narrow; expand later).
       - name: Run gubbi-cloud unit tests
-        if: matrix.cloud && secrets.GUBBI_CLOUD_PAT != ''
+        if: matrix.cloud && env.GUBBI_CLOUD_PAT != ''
         working-directory: ../${{ matrix.repo }}
         run: poetry run pytest tests/unit/ -x
