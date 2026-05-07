@@ -53,8 +53,13 @@ jobs:
           --health-retries 8
 
     steps:
+      # Both repos must live inside $GITHUB_WORKSPACE: actions/checkout@v4
+      # rejects paths that escape it. Lay them out as siblings under the
+      # workspace so the downstream's `path = "../gubbi-common"` override
+      # below resolves correctly.
       - uses: actions/checkout@v4
         with:
+          path: gubbi-common
           persist-credentials: false
 
       - name: Set up Python 3.12
@@ -83,7 +88,7 @@ jobs:
         with:
           repository: meepolabs/${{ matrix.repo }}
           ref: main
-          path: ../${{ matrix.repo }}
+          path: ${{ matrix.repo }}
           # gubbi-cloud is private; authenticate with the PAT.
           token: ${{ secrets.GUBBI_CLOUD_PAT || '' }}
           persist-credentials: false
@@ -93,7 +98,7 @@ jobs:
       # replace it in-place while preserving indentation. No multi-line hacks.
       - name: Replace gubbi-common dependency
         if: (!matrix.cloud || env.GUBBI_CLOUD_PAT != '')
-        working-directory: ../${{ matrix.repo }}
+        working-directory: ${{ matrix.repo }}
         run: |
           python3 << 'PYEOF'
           import sys
@@ -124,12 +129,12 @@ jobs:
       # -- Lock + Install -----------------------------------------------------
       - name: poetry lock (no-update)
         if: (!matrix.cloud || env.GUBBI_CLOUD_PAT != '')
-        working-directory: ../${{ matrix.repo }}
+        working-directory: ${{ matrix.repo }}
         run: poetry lock --no-update
 
       - name: poetry install
         if: (!matrix.cloud || env.GUBBI_CLOUD_PAT != '')
-        working-directory: ../${{ matrix.repo }}
+        working-directory: ${{ matrix.repo }}
         run: poetry install --no-interaction
 
       # -- Run tests ----------------------------------------------------------
@@ -137,7 +142,7 @@ jobs:
       # for any future expansion that re-enables integration tests here).
       - name: Run gubbi tests
         if: '!matrix.cloud'
-        working-directory: ../${{ matrix.repo }}
+        working-directory: ${{ matrix.repo }}
         env:
           POSTGRES_HOST: localhost
           POSTGRES_USER: postgres
@@ -148,5 +153,5 @@ jobs:
       # gubbi-cloud: narrow unit-only gate for now (start narrow; expand later).
       - name: Run gubbi-cloud unit tests
         if: matrix.cloud && env.GUBBI_CLOUD_PAT != ''
-        working-directory: ../${{ matrix.repo }}
+        working-directory: ${{ matrix.repo }}
         run: poetry run pytest tests/unit/ -x
