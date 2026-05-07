@@ -234,6 +234,30 @@ def test_correlation_none_when_nothing_set() -> None:
     assert parsed["correlation_id"] is None
 
 
+@pytest.mark.unit
+def test_set_correlation_id_returns_token_for_reset() -> None:
+    """set returns a Token; reset restores the prior value (no leak)."""
+    from gubbi_common.telemetry.logging import (
+        get_correlation_id,
+        reset_correlation_id,
+        set_correlation_id,
+    )
+
+    _reset_correlation()
+    assert get_correlation_id() is None
+
+    token = set_correlation_id("req-1")
+    assert get_correlation_id() == "req-1"
+    try:
+        inner_token = set_correlation_id("req-2-nested")
+        assert get_correlation_id() == "req-2-nested"
+        reset_correlation_id(inner_token)
+        assert get_correlation_id() == "req-1", "reset must restore prior value"
+    finally:
+        reset_correlation_id(token)
+        assert get_correlation_id() is None, "outer reset must restore default"
+
+
 # ---------------------------------------------------------------------------
 # d) Empty attributes tests
 # ---------------------------------------------------------------------------
@@ -376,10 +400,12 @@ def test_telemetry_package_reexports() -> None:
     from gubbi_common.telemetry import (
         StructuredLogFormatter,
         get_correlation_id,
+        reset_correlation_id,
         set_correlation_id,
     )
 
     assert callable(set_correlation_id)
+    assert callable(reset_correlation_id)
     assert callable(get_correlation_id)
     assert isinstance(StructuredLogFormatter(), logging.Formatter)
 
@@ -405,6 +431,7 @@ def test_public_symbols_in_all() -> None:
         "safe_set_attributes",
         "StructuredLogFormatter",
         "set_correlation_id",
+        "reset_correlation_id",
         "get_correlation_id",
     }
     assert required.issubset(set(__all__)), f"missing from __all__: {required - set(__all__)}"
@@ -464,8 +491,8 @@ def test_ensure_ascii_false_preserves_unicode() -> None:
 
 
 @pytest.mark.unit
-def test_version_is_050() -> None:
-    """v0.5.0 — minor bump for the new StructuredLogFormatter public API."""
+def test_version_is_051() -> None:
+    """v0.5.1 -- patch adding reset_correlation_id + Token return on set_correlation_id."""
     import gubbi_common
 
-    assert gubbi_common.__version__ == "0.5.0"
+    assert gubbi_common.__version__ == "0.5.1"

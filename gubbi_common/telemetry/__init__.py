@@ -7,6 +7,7 @@ from gubbi_common.telemetry.allowlist import (
 from gubbi_common.telemetry.logging import (
     StructuredLogFormatter,
     get_correlation_id,
+    reset_correlation_id,
     set_correlation_id,
 )
 
@@ -19,5 +20,6 @@ __all__ = [
     "safe_set_attributes",
     "StructuredLogFormatter",
     "set_correlation_id",
+    "reset_correlation_id",
     "get_correlation_id",
 ]
