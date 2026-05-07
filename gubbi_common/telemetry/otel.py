@@ -31,8 +31,10 @@ def configure_otel(
 ) -> None:
     """Configure the OTel SDK without cloud-specific auto-instrumentors.
 
-    * ``disabled`` -- when ``enabled=False``, installs no-op providers so all
-      instrumentation is wired but **zero** data leaves the process.
+    * ``disabled`` -- when ``enabled=False``, installs SDK providers with
+      no span processors and no metric readers (sink / no-export
+      configuration). Instrumentation is wired but **zero** data leaves
+      the process.
     * Otherwise configures an ``OTLPSpanExporter`` +
       ``OTLPMetricExporter`` pointed at *endpoint* (the local otel-collector
       gRPC port).

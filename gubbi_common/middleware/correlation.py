@@ -17,8 +17,9 @@ Both consumers share the same core behaviour:
    consumer can route through its own per-repo OTel allowlist without
    this module depending on OpenTelemetry directly.
 
-``starlette`` provides the ASGI type imports used here and must be
-installed by consumers as a peer dependency.
+``starlette`` provides the ASGI type imports used here. As of
+gubbi-common v0.7.0 it is declared as a direct runtime dependency in
+``pyproject.toml``.
 """
 
 from __future__ import annotations
@@ -86,9 +87,12 @@ class CorrelationIDMiddleware:
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         # ---- read header from ASGI scope (byte-iteration, cloud pattern)
+        # ASGI spec requires lowercased header names in scope, but compare
+        # case-insensitively as defense in depth in case a server forwards
+        # raw cases.
         raw_cid: str | None = None
         for key, val in scope.get("headers", []):
-            if key == HEADER_NAME_BYTES:
+            if key.lower() == HEADER_NAME_BYTES:
                 try:
                     raw_cid = val.decode("ascii").strip()
                 except (UnicodeDecodeError, AttributeError):
