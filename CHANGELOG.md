@@ -7,6 +7,24 @@ tag if they don't need the new surface. See
 release-tagging policy: not every commit gets a tag; tags mark stable
 adoption points.
 
+## 0.7.2 -- 2026-05-09
+
+### Changed
+
+- chore(deps): bump pytest 8 -> 9 + pytest-asyncio 0.25 -> 1.x
+  (closes dependabot CVE-2025-71176 / GHSA-6w46-j5rx-g56g; pytest
+  <9.0.3 had world-readable ``/tmp/pytest-of-{user}`` paths
+  exploitable on shared multi-user Linux hosts).
+
+**Consumer impact:** dev-only. Consumers MUST harmonize their own
+``pytest`` and ``pytest-asyncio`` pins to the same floors when bumping
+to this version. pytest 9 requires pytest-asyncio >= 1.x (resolver-
+enforced); pytest-asyncio 1.x changed default ``loop_scope`` semantics
+for ``@pytest.mark.asyncio`` -- consumers running ``asyncio_mode =
+"strict"`` with explicit per-test marks (gubbi-common's pattern) are
+unaffected; consumers running ``asyncio_mode = "auto"`` should audit
+class-level marks and any ``event_loop`` fixture overrides.
+
 ## 0.7.1 -- 2026-05-09
 
 ### Added
