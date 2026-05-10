@@ -7,6 +7,27 @@ tag if they don't need the new surface. See
 release-tagging policy: not every commit gets a tag; tags mark stable
 adoption points.
 
+## 0.7.1 -- 2026-05-09
+
+### Added
+
+- ``gubbi_common.telemetry.bound_logger(request)`` -- structlog logger
+  factory that pre-binds ``correlation_id`` (from gubbi-common's
+  ContextVar) and ``user_id`` / ``tenant_id`` (from ``request.state``)
+  for any code path running under a Starlette request scope. Missing
+  values are simply absent from the bound dict (NOT bound as ``None``),
+  so log calls in early-pipeline middleware before auth/subscription
+  bind those values still work cleanly. Consolidates ~10 lines of
+  duplicated binding logic that would otherwise live in each consumer
+  (CO.50 prep).
+
+**Non-breaking (additive).** No signature changes to any existing
+public API.
+
+**Consumer impact:** optional. Per-repo migrations land as CO.50-gubbi
+and CO.50-cloud, which adopt ``bound_logger`` in route handlers and
+standardise logger naming to ``structlog.get_logger(__name__)``.
+
 ## 0.7.0 -- 2026-05-06
 
 ### Added
