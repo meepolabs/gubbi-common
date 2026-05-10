@@ -491,8 +491,8 @@ def test_ensure_ascii_false_preserves_unicode() -> None:
 
 
 @pytest.mark.unit
-def test_version_is_072() -> None:
-    """v0.7.2 -- chore: bump pytest 8 -> 9 + pytest-asyncio 0.25 -> 1.x (closes CVE-2025-71176)."""
+def test_version_is_080() -> None:
+    """v0.8.0 -- feat: extraction_job Action constants + gubbi_common.budget package."""
     import gubbi_common
 
-    assert gubbi_common.__version__ == "0.7.2"
+    assert gubbi_common.__version__ == "0.8.0"
