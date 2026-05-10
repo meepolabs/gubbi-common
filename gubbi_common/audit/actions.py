@@ -87,6 +87,9 @@ class Action:
     # Emitted by the extraction worker when a conversation finishes
     # processing (entries created, tags applied, processed_at stamped).
     CONVERSATION_EXTRACTED: Final = "conversation.extracted"
+    EXTRACTION_JOB_CREATED: Final = "extraction_job.created"
+    EXTRACTION_JOB_COMPLETED: Final = "extraction_job.completed"
+    EXTRACTION_JOB_FAILED: Final = "extraction_job.failed"
 
     # ---------------------------------------------------------------
     # Privileged operations
@@ -150,6 +153,9 @@ _GUBBI_REFERENCED: frozenset[str] = frozenset(
         # --- Currently wired in gubbi code ---
         "conversation.saved",  # gubbi/core/audit_decorator.py (ACTION_CONVERSATION_SAVED)
         "conversation.extracted",  # gubbi/extraction/jobs/extract_conversation.py
+        "extraction_job.created",  # gubbi/gubbi/api/v1/ingest.py
+        "extraction_job.completed",  # gubbi/gubbi/extraction/jobs/extract_conversation.py
+        "extraction_job.failed",  # gubbi/gubbi/extraction/jobs/extract_conversation.py
         "entry.created",  # gubbi/core/audit_decorator.py (ACTION_ENTRY_CREATED)
         "entry.deleted",  # gubbi/core/audit_decorator.py (ACTION_ENTRY_DELETED)
         "entry.updated",  # gubbi/core/audit_decorator.py (ACTION_ENTRY_UPDATED)

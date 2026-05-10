@@ -7,6 +7,46 @@ tag if they don't need the new surface. See
 release-tagging policy: not every commit gets a tag; tags mark stable
 adoption points.
 
+## 0.8.0 -- 2026-05-10
+
+### Added
+
+- ``Action.EXTRACTION_JOB_CREATED``, ``Action.EXTRACTION_JOB_COMPLETED``,
+  ``Action.EXTRACTION_JOB_FAILED`` constants in
+  ``gubbi_common.audit.actions`` for extraction-tracking audit events.
+  All three are registered in ``_GUBBI_REFERENCED`` (citing their
+  planned call sites in the extraction-tracking rework).
+
+- New ``gubbi_common.budget`` package promoting shared LLM budget
+  primitives from ``gubbi_cloud.gateway``:
+
+  - ``PRE_CHARGE_CENTS: Final[int] = 50`` -- default per-extraction
+    pre-charge estimate in cents.
+  - ``PRE_CHARGE_LUA: Final[str]`` -- the atomic Lua script that debits
+    ``used_cents`` from the Redis budget hash only if ``used + estimated
+    <= cap``, marks the bucket dirty, and refreshes the TTL.
+  - ``current_period_start() -> date`` -- returns the UTC first-of-month
+    for the current instant (D10: UTC-anchored).
+  - ``budget_key(user_id, period_start) -> str`` -- formats the Redis hash
+    key ``budget:{user_id}:{period_start}``.
+  - ``dirty_member(user_id, period_start) -> str`` -- formats the member
+    string ``{user_id}:{period_start}`` used in the ``budget:dirty`` SET.
+  - ``BudgetHelper(*, redis, pre_charge_script)`` -- thin facade exposing
+    two methods: ``pre_charge`` (runs Lua; returns True/False) and
+    ``record_actual_cost`` (HINCRBY delta, SADD dirty, EXPIRE 3600).
+    Negative delta (refund) is fully supported.
+
+**Consumer impact:** additive. Existing imports are unaffected. Consumers
+migrating from ``gubbi_cloud.gateway.budget_middleware`` can replace
+local copies of ``PRE_CHARGE_CENTS``, ``PRE_CHARGE_LUA``,
+``current_period_start()``, and the budget/dirty key formatters with
+imports from ``gubbi_common.budget``. The ``_RedisClient`` /
+``_RedisScript`` Protocol shapes are internal to
+``gubbi_common.budget.helper``; consumers that need to type their own
+Redis client stubs should copy the Protocol definitions or import from
+the internal module path with the understanding that it is not part of
+the stable public API.
+
 ## 0.7.2 -- 2026-05-09
 
 ### Changed
