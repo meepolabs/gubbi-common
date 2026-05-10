@@ -4,6 +4,9 @@ from gubbi_common.telemetry.allowlist import (
     BANNED_KEYS,
     safe_set_attributes,
 )
+from gubbi_common.telemetry.bound_logger import (
+    bound_logger,
+)
 from gubbi_common.telemetry.logging import (
     StructuredLogFormatter,
     get_correlation_id,
@@ -24,6 +27,7 @@ __all__ = [
     "BANNED_KEYS",
     "safe_set_attributes",
     "StructuredLogFormatter",
+    "bound_logger",
     "set_correlation_id",
     "reset_correlation_id",
     "get_correlation_id",
