@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "gubbi-common"
-version = "0.7.1"
+version = "0.7.2"
 description = "Shared contracts (audit, auth, telemetry) for Gubbi packages"
 authors = ["madhukar01 <mholla8@gmail.com>"]
 license = "AGPL-3.0-or-later"
@@ -20,8 +20,8 @@ opentelemetry-exporter-otlp-proto-grpc = ">=1.29.0,<2.0"
 db = ["asyncpg"]
 
 [tool.poetry.group.dev.dependencies]
-pytest = "^8.0.0"
-pytest-asyncio = "^0.25.0"  # TIGHT: pre-1.0; minor bumps shift loop-scope semantics. Harmonised with gubbi + gubbi-cloud.
+pytest = "^9.0.3"
+pytest-asyncio = "^1.3.0"  # TIGHT: pytest 9 requires pytest-asyncio >= 1.x. 1.0 introduced loop-scope semantics changes; ``asyncio_mode = "strict"`` (see [tool.pytest.ini_options]) plus per-test ``@pytest.mark.asyncio`` keeps fixtures explicit. Pin floor matches lock-resolved version so consumers pinning the same constraint get reproducible behavior. Harmonised with gubbi + gubbi-cloud (Wave 4 follows). Closes CVE-2025-71176 (pytest <9.0.3 world-readable /tmp/pytest-of-{user} on multi-user hosts).
 pytest-cov = "^6.0.0"
 pre-commit = "^3.5.0"
 # TIGHT: ruff format-rule changes between minors mass-rewrite source.
