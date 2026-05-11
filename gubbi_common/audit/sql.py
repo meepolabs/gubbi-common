@@ -31,7 +31,10 @@ from __future__ import annotations
 import ipaddress
 import json
 import textwrap
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Final
+from uuid import UUID
+
+from gubbi_common.telemetry.allowlist import is_banned_key
 
 if TYPE_CHECKING:
     import asyncpg
@@ -41,9 +44,43 @@ __all__ = [
     "AUDIT_INSERT_SHORT_SQL",
     "AUDIT_INSERT_SQL",
     "AUDIT_INSERT_SQL_RICH",
+    "MAX_METADATA_BYTES",
     "VALID_ACTOR_TYPES",
     "record_audit_async",
 ]
+
+
+# Hard cap on the JSON-encoded size of an audit row's ``metadata`` column.
+# 4 KiB matches the rule of thumb for JSONB inline storage and ensures any
+# single audit row stays well under TOAST overflow thresholds. Callers
+# whose payload genuinely exceeds this limit must summarise (counts,
+# hashes, IDs) rather than stuff full content into the column.
+MAX_METADATA_BYTES: Final[int] = 4096
+
+# Maximum recursion depth for metadata redaction (DoS guard). The mutual
+# recursion between ``_redact_metadata`` and ``_redact_metadata_value``
+# increments depth by 2 per dict-nesting level, so a value of 20
+# corresponds to ~9-10 real dict-nesting levels. Any legitimate audit
+# payload nests well under this; the cap exists to bound the worst case
+# from a malicious or buggy caller. Exceeding the cap raises
+# ``ValueError`` so the caller surfaces the invalid payload at the
+# boundary instead of silently truncating or crashing the worker.
+_MAX_REDACT_DEPTH: Final[int] = 20
+
+# Sentinel placeholder substituted in for any banned-key value during
+# metadata redaction. Mirrors the convention used elsewhere in the
+# privacy-defense layer (telemetry allowlist).
+_REDACTED: Final[str] = "[REDACTED]"
+
+# Accepted non-UUID actor / target identifier prefixes. Rows must look
+# like a UUID or carry one of these prefixes so downstream analytics can
+# safely group on actor_id / target_id without joining a freeform string
+# table.
+_AUDIT_ID_PREFIXES: Final[tuple[str, ...]] = (
+    "system:",
+    "script:",
+    "hydra_subject:",
+)
 
 
 # Values the audit_log.actor_type CHECK constraint accepts. Must stay in
@@ -106,6 +143,84 @@ AUDIT_INSERT_SQL_RICH: str = textwrap.dedent(
 )
 
 
+def _validate_audit_id(value: str | None, *, field: str) -> None:
+    """Validate ``actor_id`` / ``target_id`` shape.
+
+    Accepts either a UUID string (any valid format the standard library
+    parses) or a string starting with one of ``_AUDIT_ID_PREFIXES``
+    (``system:``, ``script:``, ``hydra_subject:``). ``None`` passes
+    through silently for the optional ``target_id`` field. Empty /
+    whitespace-only strings are rejected.
+
+    The ``UUID(value)`` call raises ``ValueError`` for malformed input;
+    ``AttributeError`` and ``TypeError`` are unreachable thanks to the
+    None / empty-string guards above and the ``str | None`` annotation.
+    Catching only ``ValueError`` here makes the surface the function
+    actually defends against legible at the call site.
+    """
+    if value is None:
+        return
+    if not value or not value.strip():
+        raise ValueError(
+            f"record_audit_async: {field} must be a UUID or one of "
+            f"{list(_AUDIT_ID_PREFIXES)}; got empty / whitespace value"
+        )
+    try:
+        UUID(value)
+        return
+    except ValueError:
+        pass
+    if not any(value.startswith(prefix) for prefix in _AUDIT_ID_PREFIXES):
+        raise ValueError(
+            f"record_audit_async: {field}={value!r} is not a UUID and "
+            f"does not start with one of {list(_AUDIT_ID_PREFIXES)}"
+        )
+
+
+def _redact_metadata_value(value: Any, depth: int = 0) -> Any:
+    """Recursively walk *value*, redacting any banned-key entries inside dicts.
+
+    Lists and tuples recurse element-wise -- tuples are emitted as lists
+    because ``json.dumps`` would already collapse them to JSON arrays,
+    and downstream consumers read the metadata as JSON. Scalars pass
+    through. *depth* tracks recursion depth across the dict / list /
+    tuple mutual-recursion edges so a pathological input cannot blow
+    the stack; ``ValueError`` is raised once depth exceeds
+    :data:`_MAX_REDACT_DEPTH`.
+    """
+    if depth > _MAX_REDACT_DEPTH:
+        raise ValueError("metadata exceeds redaction depth limit")
+    if isinstance(value, dict):
+        return _redact_metadata(value, depth=depth + 1)
+    if isinstance(value, list | tuple):
+        return [_redact_metadata_value(v, depth=depth + 1) for v in value]
+    return value
+
+
+def _redact_metadata(meta: dict[str, Any], depth: int = 0) -> dict[str, Any]:
+    """Return a NEW dict with every banned-key value replaced by ``[REDACTED]``.
+
+    Pure: input is not mutated. Recursion descends into nested dicts and
+    lists; non-container values pass through unchanged. Banned keys are
+    those flagged by ``gubbi_common.telemetry.is_banned_key`` -- the same
+    classifier used by the OTel attribute allowlist, so the audit-row
+    privacy rules and the telemetry rules cannot drift.
+
+    *depth* tracks recursion depth; ``ValueError`` is raised once depth
+    exceeds :data:`_MAX_REDACT_DEPTH`. Both helpers share the same depth
+    counter so the cap holds across the dict/list mutual-recursion edge.
+    """
+    if depth > _MAX_REDACT_DEPTH:
+        raise ValueError("metadata exceeds redaction depth limit")
+    out: dict[str, Any] = {}
+    for key, value in meta.items():
+        if isinstance(key, str) and is_banned_key(key):
+            out[key] = _REDACTED
+            continue
+        out[key] = _redact_metadata_value(value, depth=depth + 1)
+    return out
+
+
 async def record_audit_async(
     conn: asyncpg.Connection,
     *,
@@ -144,9 +259,12 @@ async def record_audit_async(
     reason:
         Optional human-readable explanation.
     metadata:
-        Optional JSON-serialisable dict. Defaults to empty dict. Never
-        include secret values or PII; pass hashes when forensics need
-        the link.
+        Optional JSON-serialisable dict. Defaults to empty dict. Banned
+        keys (per ``gubbi_common.telemetry.is_banned_key``) are redacted
+        recursively, replacing each banned-key value with
+        ``"[REDACTED]"``. The post-redaction JSON-encoded payload must be
+        <= ``MAX_METADATA_BYTES`` (4096); larger payloads raise
+        ``ValueError``.
     ip_address:
         Optional originating IP. Validated against ``ipaddress`` and
         cast to ``inet`` server-side.
@@ -156,13 +274,17 @@ async def record_audit_async(
     Raises
     ------
     ValueError
-        If ``actor_type`` is not one of the four accepted values, or if
-        ``ip_address`` is not a valid IPv4 / IPv6 address.
+        If ``actor_type`` is not one of the four accepted values, if
+        ``ip_address`` is not a valid IPv4 / IPv6 address, or if the
+        post-redaction metadata exceeds ``MAX_METADATA_BYTES``.
     """
     if actor_type not in VALID_ACTOR_TYPES:
         raise ValueError(
             f"Invalid actor_type {actor_type!r}. " f"Must be one of: {sorted(VALID_ACTOR_TYPES)}"
         )
+
+    _validate_audit_id(actor_id, field="actor_id")
+    _validate_audit_id(target_id, field="target_id")
 
     # Validate AND normalize the IP. Three rules collapse near-duplicate
     # representations so audit forensics dedupe correctly:
@@ -191,7 +313,15 @@ async def record_audit_async(
         normalized_ip = str(ip_obj)
 
     resolved_metadata: dict[str, Any] = metadata if metadata is not None else {}
-    metadata_json = json.dumps(resolved_metadata)
+    redacted_metadata = _redact_metadata(resolved_metadata)
+    metadata_json = json.dumps(redacted_metadata)
+    metadata_bytes = metadata_json.encode("utf-8")
+    if len(metadata_bytes) > MAX_METADATA_BYTES:
+        raise ValueError(
+            f"record_audit_async: metadata exceeds {MAX_METADATA_BYTES}-byte cap "
+            f"(got {len(metadata_bytes)} bytes after redaction); "
+            "summarise (counts, hashes, IDs) rather than embedding full payloads"
+        )
 
     await conn.execute(
         AUDIT_INSERT_SQL,

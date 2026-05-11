@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "gubbi-common"
-version = "0.8.0"
+version = "0.9.0"
 description = "Shared contracts (audit, auth, telemetry) for Gubbi packages"
 authors = ["madhukar01 <mholla8@gmail.com>"]
 license = "AGPL-3.0-or-later"
@@ -28,6 +28,11 @@ pre-commit = "^3.5.0"
 # Caret on a 0.x already means <0.9; do not relax without a coordinated reformat commit.
 ruff = "^0.8.0"
 mypy = "^1.13.0"
+# Integration tests in tests/integration use testcontainers to spin a
+# pgvector/pgvector:pg16 Postgres for asyncpg-against-real-DB coverage
+# (audit dedup, schema drift). Gated behind ``INTEGRATION=1`` env var
+# so the default lane never requires Docker.
+testcontainers = {version = "^4.8", extras = ["postgres"]}
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
@@ -65,4 +70,5 @@ python_functions = "test_*"
 asyncio_mode = "strict"
 markers = [
     "unit: fast, isolated unit tests with no external dependencies",
+    "integration: integration tests requiring docker / testcontainers",
 ]

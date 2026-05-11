@@ -491,8 +491,8 @@ def test_ensure_ascii_false_preserves_unicode() -> None:
 
 
 @pytest.mark.unit
-def test_version_is_080() -> None:
-    """v0.8.0 -- feat: extraction_job Action constants + gubbi_common.budget package."""
+def test_version_is_090() -> None:
+    """v0.9.0 -- m234 fix-pass: H-16 GUC reset/readonly, H-17 audit hardening, M-11 StrEnum."""
     import gubbi_common
 
-    assert gubbi_common.__version__ == "0.8.0"
+    assert gubbi_common.__version__ == "0.9.0"

@@ -290,3 +290,93 @@ def test_span_allowlist_not_exported() -> None:
     from gubbi_common.telemetry import __all__ as telemetry_all
 
     assert "SPAN_ALLOWLIST" not in telemetry_all
+
+
+# ===========================================================================
+# Public is_banned_key promotion (formerly _is_banned)
+# ===========================================================================
+
+
+@pytest.mark.unit
+def test_is_banned_key_public_export() -> None:
+    """is_banned_key is importable from the telemetry package root."""
+    from gubbi_common.telemetry import is_banned_key
+
+    assert callable(is_banned_key)
+
+
+@pytest.mark.unit
+def test_is_banned_key_credential_substring() -> None:
+    """A bare BANNED_KEYS substring (no derivative suffix) is banned."""
+    from gubbi_common.telemetry import is_banned_key
+
+    assert is_banned_key("password")
+    assert is_banned_key("user_email")
+    assert is_banned_key("client_user_agent")
+
+
+@pytest.mark.unit
+def test_is_banned_key_derivative_suffix_exempt() -> None:
+    """A derivative suffix on a banned base is NOT banned."""
+    from gubbi_common.telemetry import is_banned_key
+
+    assert not is_banned_key("email_hash")
+    assert not is_banned_key("body_size")
+    assert not is_banned_key("query_count")
+
+
+@pytest.mark.unit
+def test_is_banned_key_never_exempt_base_overrides_suffix() -> None:
+    """A NEVER_EXEMPT_BASES base remains banned even with a derivative suffix."""
+    from gubbi_common.telemetry import is_banned_key
+
+    assert is_banned_key("password_hash")
+    assert is_banned_key("session_token_id")
+    assert is_banned_key("api_credential_fp")
+
+
+@pytest.mark.unit
+def test_is_banned_alias_still_works() -> None:
+    """The legacy ``_is_banned`` alias remains importable for one minor."""
+    from gubbi_common.telemetry.allowlist import _is_banned, is_banned_key
+
+    assert _is_banned is is_banned_key
+
+
+# ===========================================================================
+# A-M1: case-insensitive banned-key check
+# ===========================================================================
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "key",
+    [
+        "Email",
+        "EMAIL",
+        "User_Agent",
+        "USER_AGENT",
+        "Content",
+        "Password",
+        "PASSWORD_HASH",  # NEVER_EXEMPT base, mixed case
+    ],
+)
+def test_is_banned_key_case_insensitive(key: str) -> None:
+    """A-M1: mixed/upper-case keys must hit the same ban as lower-case.
+
+    Without normalisation, ``Email`` would slip past the substring check
+    against the lower-case BANNED_KEYS entries -- a silent privacy regression.
+    """
+    from gubbi_common.telemetry import is_banned_key
+
+    assert is_banned_key(key), f"expected {key!r} banned via case-insensitive match"
+
+
+@pytest.mark.unit
+def test_is_banned_key_uppercase_derivative_still_exempt() -> None:
+    """An uppercase derivative-suffix key on a non-NEVER-EXEMPT base is still exempt."""
+    from gubbi_common.telemetry import is_banned_key
+
+    # email_hash is exempt (email is not a NEVER_EXEMPT base, _hash is derivative).
+    assert not is_banned_key("EMAIL_HASH")
+    assert not is_banned_key("Body_Size")

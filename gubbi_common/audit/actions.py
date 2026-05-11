@@ -13,16 +13,23 @@ and use the class attributes; do not invent ad-hoc strings.
 The string values use namespaced dot-separated identifiers
 (``identity.created``, ``tenant.provisioned``) so downstream queries can
 filter by prefix (``action LIKE 'identity.%'``).
+
+Action is a ``StrEnum`` with an explicit ``__str__`` override. Without
+the override, Python 3.11 returns ``"Action.LOGIN_FAILED"`` from
+``str(Action.LOGIN_FAILED)`` while 3.12 returns ``"login_failed"`` -- a
+silent format-string regression on minor-version upgrade. Pinning
+``__str__`` to ``self.value`` keeps ``f"{Action.X}"`` and ``str(...)``
+behaviour identical across both versions.
 """
 
 from __future__ import annotations
 
-from typing import Final
+from enum import StrEnum
 
 __all__ = ["Action"]
 
 
-class Action:
+class Action(StrEnum):
     """Audit-log action string constants.
 
     Values are persisted to ``audit_log.action`` (TEXT). Treat them as a
@@ -37,35 +44,35 @@ class Action:
     # identity-shaped event with ``action LIKE 'identity.%'``. gubbi
     # Alembic migration 0015 rewrites legacy ``user.*`` rows from M2 to
     # the ``identity.*`` namespace.
-    IDENTITY_CREATED: Final = "identity.created"
-    IDENTITY_UPDATED: Final = "identity.updated"
-    IDENTITY_DELETED: Final = "identity.deleted"
-    IDENTITY_RESTORED: Final = "identity.restored"
+    IDENTITY_CREATED = "identity.created"
+    IDENTITY_UPDATED = "identity.updated"
+    IDENTITY_DELETED = "identity.deleted"
+    IDENTITY_RESTORED = "identity.restored"
 
     # ---------------------------------------------------------------
     # Tenant lifecycle
     # ---------------------------------------------------------------
-    TENANT_PROVISIONED: Final = "tenant.provisioned"
-    TENANT_SUSPENDED: Final = "tenant.suspended"
-    TENANT_REACTIVATED: Final = "tenant.reactivated"
-    TENANT_DEPROVISIONED: Final = "tenant.deprovisioned"
+    TENANT_PROVISIONED = "tenant.provisioned"
+    TENANT_SUSPENDED = "tenant.suspended"
+    TENANT_REACTIVATED = "tenant.reactivated"
+    TENANT_DEPROVISIONED = "tenant.deprovisioned"
     # Emitted when a tenant row is orphaned (user_id set to NULL via
     # ON DELETE SET NULL on the tenants.user_id FK). See cloud-api
     # migration 0008 (m-real-bugs-cloud / M-3.2).
-    TENANT_ORPHANED: Final = "tenant.orphaned"
+    TENANT_ORPHANED = "tenant.orphaned"
 
     # ---------------------------------------------------------------
     # Auth events
     # ---------------------------------------------------------------
-    LOGIN_FAILED: Final = "login_failed"
+    LOGIN_FAILED = "login_failed"
 
     # ---------------------------------------------------------------
     # Subscription lifecycle (M4+)
     # ---------------------------------------------------------------
-    SUBSCRIPTION_CREATED: Final = "subscription.created"
-    SUBSCRIPTION_UPDATED: Final = "subscription.updated"
-    SUBSCRIPTION_CANCELED: Final = "subscription.canceled"
-    SUBSCRIPTION_OVERRIDE: Final = "subscription.override"
+    SUBSCRIPTION_CREATED = "subscription.created"
+    SUBSCRIPTION_UPDATED = "subscription.updated"
+    SUBSCRIPTION_CANCELED = "subscription.canceled"
+    SUBSCRIPTION_OVERRIDE = "subscription.override"
 
     # ---------------------------------------------------------------
     # Billing gates
@@ -74,35 +81,42 @@ class Action:
     # blocked because the user's email is not yet verified. See H-13
     # backlog: cloud-api previously used the raw literal string
     # "billing.email_unverified_blocked" pending this enum entry.
-    BILLING_EMAIL_UNVERIFIED_BLOCKED: Final = "billing.email_unverified_blocked"
+    BILLING_EMAIL_UNVERIFIED_BLOCKED = "billing.email_unverified_blocked"
 
     # ---------------------------------------------------------------
     # Journal content operations
     # ---------------------------------------------------------------
-    ENTRY_CREATED: Final = "entry.created"
-    ENTRY_UPDATED: Final = "entry.updated"
-    ENTRY_DELETED: Final = "entry.deleted"
-    TOPIC_CREATED: Final = "topic.created"
-    CONVERSATION_SAVED: Final = "conversation.saved"
+    ENTRY_CREATED = "entry.created"
+    ENTRY_UPDATED = "entry.updated"
+    ENTRY_DELETED = "entry.deleted"
+    TOPIC_CREATED = "topic.created"
+    CONVERSATION_SAVED = "conversation.saved"
     # Emitted by the extraction worker when a conversation finishes
     # processing (entries created, tags applied, processed_at stamped).
-    CONVERSATION_EXTRACTED: Final = "conversation.extracted"
-    EXTRACTION_JOB_CREATED: Final = "extraction_job.created"
-    EXTRACTION_JOB_COMPLETED: Final = "extraction_job.completed"
-    EXTRACTION_JOB_FAILED: Final = "extraction_job.failed"
+    CONVERSATION_EXTRACTED = "conversation.extracted"
+    EXTRACTION_JOB_CREATED = "extraction_job.created"
+    EXTRACTION_JOB_COMPLETED = "extraction_job.completed"
+    EXTRACTION_JOB_FAILED = "extraction_job.failed"
 
     # ---------------------------------------------------------------
     # Privileged operations
     # ---------------------------------------------------------------
-    SECRET_ROTATED: Final = "secret.rotated"  # noqa: S105 -- action label, not a password
-    ADMIN_QUERY_EXECUTED: Final = "admin.query_executed"
-    ENCRYPTION_KEY_ROTATED: Final = "encryption.key_rotated"
+    SECRET_ROTATED = "secret.rotated"  # noqa: S105 -- action label, not a password
+    ADMIN_QUERY_EXECUTED = "admin.query_executed"
+    ENCRYPTION_KEY_ROTATED = "encryption.key_rotated"
 
     # ---------------------------------------------------------------
     # Admin / cleanup operations
     # ---------------------------------------------------------------
-    USER_DELETED: Final = "user.deleted"
-    CLIENT_DELETED: Final = "client.deleted"
+    USER_DELETED = "user.deleted"
+    CLIENT_DELETED = "client.deleted"
+
+    def __str__(self) -> str:
+        # Lock 3.11 / 3.12 parity: without this override, 3.11's StrEnum
+        # __str__ returns "Action.LOGIN_FAILED" while 3.12's returns
+        # "login_failed". Pinning to self.value makes f-strings, logging,
+        # and SQL parameter formatting identical across both versions.
+        return self.value
 
 
 # Consumer reference registries, updated from the actual consumer repos.
