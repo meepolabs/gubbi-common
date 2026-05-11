@@ -165,7 +165,7 @@ def test_action_fstring_returns_value() -> None:
 
 
 @pytest.mark.unit
-def test_action_iterable_count_eighteen() -> None:
+def test_action_iterable_count_guard() -> None:
     """The Action enum exposes the expected number of distinct events.
 
     This guards an accidental constant drop. Update only when an
