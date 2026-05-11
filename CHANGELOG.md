@@ -7,6 +7,94 @@ tag if they don't need the new surface. See
 release-tagging policy: not every commit gets a tag; tags mark stable
 adoption points.
 
+## 0.9.0 -- 2026-05-11
+
+### Added
+
+- ``gubbi_common.db.user_scoped_connection_readonly`` -- read-only
+  scoped connection variant. Skips ``conn.transaction()`` and uses
+  session-scoped ``set_config(..., false)`` for the RLS GUCs; intended
+  for read paths (semantic search, list endpoints) where transaction
+  overhead is unwanted. Pairs with a ``RESET`` in the finally block to
+  prevent GUC bleed across pool checkouts.
+- ``gubbi_common.telemetry.is_banned_key`` -- public promotion of the
+  former private ``_is_banned`` classifier. The legacy underscore name
+  is kept as a deprecation alias for one minor release; remove in
+  0.10.0.
+- ``gubbi_common.bootstrap.pg_log_probe`` -- inspects
+  ``log_statement``, ``log_min_duration_statement``,
+  ``log_parameter_max_length``, ``auto_explain.log_min_duration``, and
+  ``pg_stat_statements.track`` for loud configurations that would
+  capture statement text or bound parameters in cluster logs.
+  ``probe_pg_log_settings(pool, mode=...)`` accepts ``STRICT`` (raise),
+  ``WARN`` (log), or ``OFF`` (skip) via a ``PgLogProbeMode`` StrEnum or
+  bare string. Consumers wire the env-var policy themselves; this
+  module does not read the environment.
+- ``gubbi_common.audit.sql.MAX_METADATA_BYTES`` -- 4096-byte hard cap
+  on the JSON-encoded ``audit_log.metadata`` payload.
+
+### Changed
+
+- ``gubbi_common.audit.sql.record_audit_async`` now redacts banned-key
+  values (per ``is_banned_key``) recursively before serialisation and
+  rejects metadata that exceeds ``MAX_METADATA_BYTES`` after redaction.
+  Banned-key values become the literal ``"[REDACTED]"``. Callers whose
+  payload is genuinely large must summarise (counts, hashes, IDs)
+  rather than embedding full content.
+- ``gubbi_common.audit.sql.record_audit_async`` now validates
+  ``actor_id`` and ``target_id`` shape: each must be a UUID string or
+  start with one of ``system:``, ``script:``, ``hydra_subject:``.
+  Empty / whitespace values and unknown shapes raise ``ValueError``.
+  Technically breaking for callers that supplied malformed identifiers;
+  the pre-flight grep across both consumer repos found zero offenders.
+- ``gubbi_common.audit.actions.Action`` is now a ``StrEnum`` with an
+  explicit ``__str__`` override that returns ``self.value``. The
+  override locks ``f"{Action.X}"`` and ``str(...)`` parity across
+  Python 3.11 (default ``"Action.LOGIN_FAILED"``) and 3.12 (default
+  ``"login_failed"``); without the override an interpreter upgrade
+  silently changes downstream string formatting.
+- ``gubbi_common.db.user_scoped_connection`` now ``RESET``s
+  ``app.current_user_id`` and ``hnsw.ef_search`` in a finally block on
+  context exit. Each RESET runs in its own try/except so a failure in
+  one cleanup step does not skip the other and never masks the
+  caller's exception.
+- ``hnsw.ef_search`` setup tolerates ``UndefinedObjectError``
+  (pgvector not loaded) by logging a warning and continuing rather
+  than failing the request. Non-vector queries no longer require
+  pgvector to be installed.
+- ``hnsw_ef_search`` argument is now strictly type-checked: ``bool``,
+  ``str``, and ``float`` are rejected with ``TypeError`` (previously
+  silently coerced via ``int(...)``).
+
+### Fixed
+
+- Removed the dead ``try: import asyncpg`` guard inside
+  ``user_scoped_connection``; ``asyncpg`` is already imported at module
+  scope (consumers must install the ``[db]`` extra).
+
+### Migration notes
+
+Consumers MUST grep for ``f"{Action.X}"`` and ``str(Action.X)`` and
+verify the desired output is the bare value (``login_failed``, not
+``Action.LOGIN_FAILED``). The ``__str__`` override picks the bare value
+on both 3.11 and 3.12; consumers running 3.11 with un-overridden
+formatting may have been relying on the qualified form. Pre-flight
+sweep across both consumer repos found zero hits.
+
+Audit-metadata callers should verify that any payload exceeding 4096
+bytes JSON-encoded is summarised. The cap is enforced after redaction;
+the largest-metadata candidates (Stripe webhook, Kratos webhook,
+extraction-job completion) are well under the limit per pre-flight
+inspection.
+
+**Consumer impact:** primarily additive (new symbols) plus three
+hardening changes that are technically breaking for malformed callers
+(actor/target id shape, oversized metadata, strict ``int`` for
+``hnsw_ef_search``). The pre-flight greps for each found zero offenders
+in gubbi or gubbi-cloud; landing the bump should be safe for both
+consumers without code changes. The ``_is_banned`` deprecation alias
+keeps current imports working for one minor.
+
 ## 0.8.0 -- 2026-05-10
 
 ### Added

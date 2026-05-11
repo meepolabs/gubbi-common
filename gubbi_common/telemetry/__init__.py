@@ -2,6 +2,7 @@
 
 from gubbi_common.telemetry.allowlist import (
     BANNED_KEYS,
+    is_banned_key,
     safe_set_attributes,
 )
 from gubbi_common.telemetry.bound_logger import (
@@ -26,6 +27,7 @@ from gubbi_common.telemetry.otel import (
 __all__ = [
     "BANNED_KEYS",
     "safe_set_attributes",
+    "is_banned_key",
     "StructuredLogFormatter",
     "bound_logger",
     "set_correlation_id",

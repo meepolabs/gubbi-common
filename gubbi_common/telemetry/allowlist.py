@@ -101,8 +101,15 @@ NEVER_EXEMPT_BASES: Final[tuple[str, ...]] = (
 )
 
 
-def _is_banned(key: str) -> bool:
+def is_banned_key(key: str) -> bool:
     """Return True if *key* must be dropped from span attributes.
+
+    The check is **case-insensitive**: *key* is normalised via
+    ``str.lower()`` before any substring or membership comparison.
+    Callers commonly pass mixed-case attribute names (e.g.
+    ``Email``, ``USER_AGENT``); without lower-casing those would slip
+    past both the BANNED_KEYS substring check and the
+    NEVER_EXEMPT_BASES guard.
 
     Order:
     1. NEVER_EXEMPT_BASES is checked first -- credential-shaped tokens
@@ -113,11 +120,18 @@ def _is_banned(key: str) -> bool:
     3. Otherwise the key is banned if it equals or contains any
        :data:`BANNED_KEYS` entry as a substring.
     """
-    if any(never in key for never in NEVER_EXEMPT_BASES):
+    normalized = key.lower()
+    if any(never in normalized for never in NEVER_EXEMPT_BASES):
         return True
-    if any(key.endswith(suffix) for suffix in DERIVATIVE_MODIFIERS):
+    if any(normalized.endswith(suffix) for suffix in DERIVATIVE_MODIFIERS):
         return False
-    return key in BANNED_KEYS or any(token in key for token in BANNED_KEYS)
+    return normalized in BANNED_KEYS or any(token in normalized for token in BANNED_KEYS)
+
+
+# Deprecation alias kept for one minor release. Consumers that imported
+# the private ``_is_banned`` should switch to ``is_banned_key``; the
+# alias is removed in 0.10.0.
+_is_banned = is_banned_key
 
 
 def safe_set_attributes(
@@ -168,7 +182,7 @@ def safe_set_attributes(
         if key not in allowed:
             dropped.append(key)
             continue
-        if _is_banned(key):
+        if is_banned_key(key):
             logger.warning(
                 "Dropping banned span attribute %r on span %s",
                 key,

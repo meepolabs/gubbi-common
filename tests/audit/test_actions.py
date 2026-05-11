@@ -98,11 +98,7 @@ def test_action_repr_is_stable_string() -> None:
 @pytest.mark.unit
 def test_no_duplicate_action_values() -> None:
     """Each Action.X must map to a unique string value."""
-    values = [
-        getattr(Action, name)
-        for name in dir(Action)
-        if not name.startswith("_") and isinstance(getattr(Action, name), str)
-    ]
+    values = [member.value for member in Action]
     assert len(values) == len(set(values)), f"duplicate Action values: {values}"
 
 
@@ -122,18 +118,65 @@ def test_all_action_values_referenced_by_consumers() -> None:
 
     referenced = _CLOUD_REFERENCED | _GUBBI_REFERENCED
     missing: list[str] = []
-    for attr_name in sorted(dir(Action)):
-        if attr_name.startswith("_"):
-            continue
-        value = getattr(Action, attr_name)
+    for member in Action:
+        value = member.value
         assert isinstance(
             value, str
-        ), f"Action.{attr_name} must be a string, got {type(value).__name__}"
+        ), f"Action.{member.name} must be a string, got {type(value).__name__}"
         if value not in referenced:
-            missing.append(f"{attr_name}={value!r}")
+            missing.append(f"{member.name}={value!r}")
 
     assert not missing, (
         "The following Action constants are not found in any consumer registry. "
         "Add them to _CLOUD_REFERENCED or _GUBBI_REFERENCED if they are currently used, "
         "or remove them from Action if they are dead:\n" + "\n".join(f"  - {m}" for m in missing)
     )
+
+
+# ===========================================================================
+# M-11: StrEnum migration with explicit __str__ override (3.11/3.12 parity)
+# ===========================================================================
+
+
+@pytest.mark.unit
+def test_action_is_str_enum() -> None:
+    from enum import StrEnum
+
+    assert issubclass(Action, StrEnum)
+
+
+@pytest.mark.unit
+def test_action_str_returns_value() -> None:
+    """``str(Action.X)`` must return the bare value on both 3.11 and 3.12.
+
+    Without an explicit ``__str__`` override, Python 3.11 returns
+    ``"Action.LOGIN_FAILED"`` and 3.12 returns ``"login_failed"`` -- a
+    silent format-string regression on upgrade. The override locks
+    behaviour.
+    """
+    assert str(Action.LOGIN_FAILED) == "login_failed"
+    assert str(Action.IDENTITY_CREATED) == "identity.created"
+
+
+@pytest.mark.unit
+def test_action_fstring_returns_value() -> None:
+    assert f"{Action.LOGIN_FAILED}" == "login_failed"
+    assert f"{Action.TENANT_PROVISIONED}" == "tenant.provisioned"
+
+
+@pytest.mark.unit
+def test_action_iterable_count_eighteen() -> None:
+    """The Action enum exposes the expected number of distinct events.
+
+    This guards an accidental constant drop. Update only when an
+    Action is intentionally added or removed (with a registry update).
+    """
+    members = list(Action)
+    assert len(members) >= 18, f"unexpected Action member count: {len(members)}"
+
+
+@pytest.mark.unit
+def test_action_equality_with_raw_string_holds() -> None:
+    """StrEnum members compare equal to their raw string values."""
+    assert Action.IDENTITY_CREATED == "identity.created"
+    assert Action.LOGIN_FAILED == "login_failed"
