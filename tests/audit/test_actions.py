@@ -172,7 +172,10 @@ def test_action_iterable_count_eighteen() -> None:
     Action is intentionally added or removed (with a registry update).
     """
     members = list(Action)
-    assert len(members) >= 18, f"unexpected Action member count: {len(members)}"
+    assert len(members) == 29, (
+        f"unexpected Action member count: {len(members)} "
+        "(expected exactly 29; update this guard when intentionally adding/removing an Action)"
+    )
 
 
 @pytest.mark.unit

@@ -26,14 +26,14 @@ from gubbi_common.telemetry.otel import (
 # leading underscore signals it as a private helper.
 __all__ = [
     "BANNED_KEYS",
-    "safe_set_attributes",
-    "is_banned_key",
     "StructuredLogFormatter",
     "bound_logger",
-    "set_correlation_id",
-    "reset_correlation_id",
-    "get_correlation_id",
     "configure_otel",
+    "get_correlation_id",
     "get_tracer",
     "initialize_logger",
+    "is_banned_key",
+    "reset_correlation_id",
+    "safe_set_attributes",
+    "set_correlation_id",
 ]

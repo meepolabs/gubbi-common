@@ -59,6 +59,8 @@ class PgLogProbeError(RuntimeError):
 # always treated as safe; ``current_setting(name, true)`` returns NULL
 # in that case.
 def _is_loud_log_statement(value: str) -> bool:
+    # "mod" logs all DDL + data-modifying DML *with bound parameter values*
+    # -- the same plaintext-leak surface as "all" for any INSERT/UPDATE/DELETE.
     return value.lower() in {"all", "mod"}
 
 
