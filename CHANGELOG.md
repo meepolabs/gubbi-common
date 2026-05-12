@@ -7,6 +7,51 @@ tag if they don't need the new surface. See
 release-tagging policy: not every commit gets a tag; tags mark stable
 adoption points.
 
+## 0.9.1 -- 2026-05-11
+
+### Fixed
+
+- ``AUDIT_INSERT_DEDUPED_SQL`` now writes the 7-column tuple
+  ``(actor_type, actor_id, action, target_kind, target_type, target_id,
+  metadata)`` with ``ON CONFLICT (target_kind, target_id, action,
+  (metadata->>'content_hash'))``. Restores compatibility with the
+  partial unique index ``audit_log_content_hash_uidx`` rebuilt by gubbi
+  Alembic migration 0020. Prior 6-column shape produced 42P10 against
+  any mig-0020 DB.
+
+### Added
+
+- ``gubbi_common.audit.TargetKind`` -- ``StrEnum`` of the canonical
+  namespace discriminators (``topic``, ``entry``, ``conversation``,
+  ``extraction_job``, ``user``, ``subscription``) persisted to
+  ``audit_log.target_kind``. Mirrors the ``Action`` enum shape, with
+  ``_GUBBI_TARGET_KINDS`` / ``_CLOUD_TARGET_KINDS`` consumer-reference
+  drift-guard frozensets.
+- ``record_audit_async`` now takes a ``target_kind`` keyword argument
+  and raises ``ValueError`` if ``target_id`` is supplied without
+  ``target_kind``. Mirrors the invariant gubbi's ``record_audit``
+  enforces.
+
+### Tests
+
+- ``test_dedup_unique_index_column_composition`` -- pins the 4-tuple
+  ``(target_kind, target_id, action, (metadata->>'content_hash'))`` on
+  the partial unique index via ``pg_index`` + ``pg_get_indexdef``.
+- ``test_dedup_distinguishes_target_kinds`` -- regression test
+  exercising mig 0020's actual motivation: same ``(target_id, action,
+  content_hash)`` with different ``target_kind`` must not collide.
+- ``test_audit_ddl_based_on_matches_latest_migration`` plus the new
+  ``AUDIT_LOG_DDL_BASED_ON`` constant -- glob-scans the gubbi sibling
+  for ``*audit_log*.py`` Alembic revisions and asserts the vendored
+  ``AUDIT_LOG_DDL`` pin is current.
+
+### Consumer impact
+
+Both gubbi and gubbi-cloud must pass ``target_kind`` on every audit
+write that carries a ``target_id`` (otherwise ``record_audit_async``
+raises ``ValueError``). Cross-repo atomic re-pin lands in a follow-up
+PR per the locked C-1/C-2 plan.
+
 ## 0.9.0 -- 2026-05-11
 
 ### Added
