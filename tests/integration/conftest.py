@@ -11,9 +11,10 @@ The fast lane is unaffected: every integration test is marked
 the default ``pytest`` invocation while still letting a release-time CI
 job exercise these tests with one extra env var.
 
-Schema vendored here MUST mirror gubbi's Alembic migration 0016 partial
-unique index for audit dedup -- update both together. ``MIGRATION_DDL_PATH``
-points at the gubbi migration file; tests that compare the vendored DDL
+Schema vendored here MUST mirror gubbi's Alembic migration chain through
+0020 (which adds ``target_kind`` and rebuilds the partial unique index
+for audit dedup) -- update both together. ``MIGRATION_DDL_PATH`` points
+at the gubbi migrations directory; tests that compare the vendored DDL
 against the upstream string skip if that path is absent (e.g. when the
 gubbi-common repo is checked out without the gubbi sibling).
 """
@@ -23,7 +24,7 @@ from __future__ import annotations
 import os
 from collections.abc import AsyncIterator
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final
 
 import pytest
 import pytest_asyncio
@@ -31,15 +32,17 @@ import pytest_asyncio
 if TYPE_CHECKING:
     import asyncpg
 
-# Sibling-repo path to the gubbi alembic versions directory. The audit
-# dedup partial-index DDL lives in a file matching ``*0016*.py`` here.
-# Tests that cross-check the vendored mini-schema against the live
-# migration text use ``MIGRATION_DDL_PATH.exists()`` to skip in
-# environments where gubbi is not checked out alongside gubbi-common
-# (e.g. CI that runs only this repo). The path layout reflects the
-# actual gubbi tree shape: <repo>/gubbi/gubbi/alembic/versions/. If
-# gubbi reorganises this path, update here and any test that consults
-# the constant.
+# Sibling-repo path to the gubbi alembic versions directory. Tests that
+# cross-check the vendored mini-schema against the live migration text
+# use ``MIGRATION_DDL_PATH.exists()`` to skip in environments where
+# gubbi is not checked out alongside gubbi-common (e.g. CI that runs
+# only this repo). Today the dedup partial-index DDL contract lives
+# in migration ``20260502_0020_audit_log_target_kind.py``; the
+# ``AUDIT_LOG_DDL_BASED_ON`` constant below pins the high-water mark
+# of audit_log migrations reflected in the vendored DDL. The path
+# layout reflects the actual gubbi tree shape:
+# ``<repo>/gubbi/gubbi/alembic/versions/``. If gubbi reorganises this
+# path, update here and any test that consults the constant.
 MIGRATION_DDL_PATH = (
     Path(__file__).resolve().parent.parent.parent.parent
     / "gubbi"
@@ -49,17 +52,23 @@ MIGRATION_DDL_PATH = (
 )
 
 
-# Mirror of gubbi/migrations/0016 -- update both together.
-# The ``audit_log_content_hash_uidx`` partial unique index is the
-# substrate for ``AUDIT_INSERT_DEDUPED_SQL``'s ``ON CONFLICT`` clause.
+# Mirror of gubbi/migrations through 0022 -- update both together.
+# Migration 0020 added the ``target_kind`` column and rebuilt the
+# ``audit_log_content_hash_uidx`` partial unique index with
+# ``target_kind`` as the leading column.  That partial unique index is
+# the substrate for ``AUDIT_INSERT_DEDUPED_SQL``'s ``ON CONFLICT``
+# clause. Migration 0021 swaps a perf index (not reflected here; the
+# DDL pulls in only what the dedup/drift tests need). Migration 0022
+# converts ``id`` from BIGSERIAL to GENERATED ALWAYS AS IDENTITY.
 AUDIT_LOG_DDL = """
 CREATE TABLE IF NOT EXISTS audit_log (
-    id           BIGSERIAL PRIMARY KEY,
+    id           BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     actor_type   TEXT NOT NULL,
     actor_id     TEXT NOT NULL,
     action       TEXT NOT NULL,
     target_type  TEXT,
     target_id    TEXT,
+    target_kind  TEXT,
     reason       TEXT,
     metadata     JSONB NOT NULL DEFAULT '{}'::jsonb,
     occurred_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -68,9 +77,21 @@ CREATE TABLE IF NOT EXISTS audit_log (
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS audit_log_content_hash_uidx
-    ON audit_log (target_id, action, (metadata->>'content_hash'))
+    ON audit_log (target_kind, target_id, action, (metadata->>'content_hash'))
     WHERE metadata ? 'content_hash';
 """
+
+
+# High-water mark of the gubbi ``*audit_log*.py`` Alembic revisions
+# reflected in ``AUDIT_LOG_DDL`` above. Update this constant in lockstep
+# with any change to ``AUDIT_LOG_DDL``. The drift-guard test
+# ``test_audit_ddl_based_on_matches_latest_migration`` glob-scans the
+# gubbi sibling repo for ``*audit_log*.py`` migration filenames, parses
+# the ``YYYYMMDD_NNNN`` prefix from each, computes the max, and asserts
+# it is <= this string. A newer migration than the based-on guard means
+# ``AUDIT_LOG_DDL`` is stale and dedup tests are exercising a
+# pre-migration shape.
+AUDIT_LOG_DDL_BASED_ON: Final[str] = "20260503_0022"
 
 
 def _integration_enabled() -> bool:

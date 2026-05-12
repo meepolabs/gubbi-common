@@ -7,9 +7,13 @@ This module exposes:
 * ``AUDIT_INSERT_SQL_RICH`` -- 7-column insert that explicitly sets
   ``occurred_at`` (used by cloud-api when the wire timestamp differs from
   ``now()``).
-* ``AUDIT_INSERT_DEDUPED_SQL`` -- 6-column insert with ON CONFLICT DO
-  NOTHING for re-delivery dedup. Relies on the partial unique index
-  ``audit_log_content_hash_uidx`` (gubbi migration 0016).
+* ``AUDIT_INSERT_DEDUPED_SQL`` -- 7-column insert
+  ``(actor_type, actor_id, action, target_kind, target_type, target_id,
+  metadata)`` with ON CONFLICT DO NOTHING for re-delivery dedup. Relies
+  on the partial unique index ``audit_log_content_hash_uidx`` (gubbi
+  migration 0020) keyed on
+  ``(target_kind, target_id, action, (metadata->>'content_hash'))
+  WHERE metadata ? 'content_hash'``.
 * ``AUDIT_INSERT_SHORT_SQL`` -- 6-column insert without ``occurred_at``
   or dedup; used by the legacy ``_record_kratos_audit`` path.
 * ``record_audit_async`` -- typed wrapper around ``AUDIT_INSERT_SQL`` for
@@ -34,6 +38,7 @@ import textwrap
 from typing import TYPE_CHECKING, Any, Final
 from uuid import UUID
 
+from gubbi_common.audit.targets import TargetKind
 from gubbi_common.telemetry.allowlist import is_banned_key
 
 if TYPE_CHECKING:
@@ -116,17 +121,20 @@ AUDIT_INSERT_SHORT_SQL: str = textwrap.dedent(
 
 
 # Atomic dedup for ``identity.updated`` re-deliveries. The partial unique
-# index ``audit_log_content_hash_uidx`` (gubbi migration 0016) on
-# ``(target_id, action, metadata->>'content_hash') WHERE metadata ?
-# 'content_hash'`` enforces the constraint at the DB layer; this INSERT
-# returns no rows on conflict, signaling the caller that the audit row
-# was already written.
+# index ``audit_log_content_hash_uidx`` (gubbi migration 0020) on
+# ``(target_kind, target_id, action, metadata->>'content_hash')
+# WHERE metadata ? 'content_hash'`` enforces the constraint at the DB
+# layer; this INSERT returns no rows on conflict, signaling the caller
+# that the audit row was already written. ``target_kind`` was added in
+# migration 0020 as a namespace discriminator so heterogeneous
+# ``target_id`` values across kinds (e.g. entry id "42" vs. topic path
+# "42") cannot trip a false unique-violation.
 AUDIT_INSERT_DEDUPED_SQL: str = textwrap.dedent(
     """\
     INSERT INTO audit_log
-        (actor_type, actor_id, action, target_type, target_id, metadata)
-    VALUES ($1, $2, $3, $4, $5, $6::jsonb)
-    ON CONFLICT (target_id, action, (metadata->>'content_hash'))
+        (actor_type, actor_id, action, target_kind, target_type, target_id, metadata)
+    VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
+    ON CONFLICT (target_kind, target_id, action, (metadata->>'content_hash'))
         WHERE metadata ? 'content_hash'
     DO NOTHING
     RETURNING 1"""
@@ -229,6 +237,7 @@ async def record_audit_async(
     action: str,
     target_type: str | None = None,
     target_id: str | None = None,
+    target_kind: TargetKind | None = None,
     reason: str | None = None,
     metadata: dict[str, Any] | None = None,
     ip_address: str | None = None,
@@ -256,6 +265,23 @@ async def record_audit_async(
         ``secret``, ...).
     target_id:
         Optional entity identifier.
+    target_kind:
+        Required when ``target_id`` is supplied. Namespace discriminator
+        added in gubbi migration 0020 so the dedup partial unique index
+        ``audit_log_content_hash_uidx`` (keyed on
+        ``(target_kind, target_id, action, metadata->>'content_hash')``)
+        cannot collide across kinds with overlapping ``target_id`` shapes
+        (e.g. entry id "42" vs. topic path "42"). Passing ``target_id``
+        without ``target_kind`` raises ``ValueError``.
+
+        **NOTE:** This wrapper writes via ``AUDIT_INSERT_SQL`` (9-column),
+        which does NOT include ``target_kind`` in the INSERT column list.
+        The argument is accepted for call-site invariant enforcement only;
+        the persisted ``target_kind`` will be ``NULL`` on the row. Callers
+        that need ``target_kind`` actually persisted (e.g. for dedup
+        across heterogeneous target_id shapes) must use
+        ``AUDIT_INSERT_DEDUPED_SQL`` directly. A follow-up may unify these
+        paths; for v0.9.1 they are intentionally separate.
     reason:
         Optional human-readable explanation.
     metadata:
@@ -275,6 +301,7 @@ async def record_audit_async(
     ------
     ValueError
         If ``actor_type`` is not one of the four accepted values, if
+        ``target_id`` is supplied without ``target_kind``, if
         ``ip_address`` is not a valid IPv4 / IPv6 address, or if the
         post-redaction metadata exceeds ``MAX_METADATA_BYTES``.
     """
@@ -282,6 +309,9 @@ async def record_audit_async(
         raise ValueError(
             f"Invalid actor_type {actor_type!r}. " f"Must be one of: {sorted(VALID_ACTOR_TYPES)}"
         )
+
+    if target_id is not None and target_kind is None:
+        raise ValueError("target_id requires target_kind when writing to a dedup-indexed audit row")
 
     _validate_audit_id(actor_id, field="actor_id")
     _validate_audit_id(target_id, field="target_id")
