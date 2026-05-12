@@ -15,6 +15,7 @@ from gubbi_common.audit.sql import (
     VALID_ACTOR_TYPES,
     record_audit_async,
 )
+from gubbi_common.audit.targets import TargetKind
 
 # ---------------------------------------------------------------------------
 # SQL string shape
@@ -134,6 +135,7 @@ async def test_record_audit_async_executes_canonical_insert() -> None:
         action="identity.created",
         target_type="user",
         target_id="00000000-0000-0000-0000-0000000000ab",
+        target_kind=TargetKind.USER,
         metadata={"k": "v"},
     )
 
@@ -623,6 +625,7 @@ async def test_target_id_uuid_accepted() -> None:
         actor_id="system:worker",
         action="identity.created",
         target_id="11111111-2222-3333-4444-555555555555",
+        target_kind=TargetKind.USER,
     )
     assert len(conn.calls) == 1
 
@@ -638,6 +641,30 @@ async def test_target_id_unknown_rejected() -> None:
             actor_id="system:worker",
             action="identity.created",
             target_id="not-a-uuid-or-prefix",
+            target_kind=TargetKind.USER,
+        )
+    assert conn.calls == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_target_id_without_target_kind_rejected() -> None:
+    """Direct test for the ``target_id requires target_kind`` invariant.
+
+    The invariant added alongside migration 0020 fires when a caller
+    supplies ``target_id`` without ``target_kind``. Without this test,
+    a regression that drops the guard would only surface at the DB
+    layer (NULL target_kind on a row that should carry it for dedup).
+    """
+    conn = _StubConn()
+    with pytest.raises(ValueError, match="target_id requires target_kind"):
+        await record_audit_async(
+            conn,  # type: ignore[arg-type]
+            actor_type="system",
+            actor_id="system:worker",
+            action="identity.created",
+            target_id="some-id",
+            # target_kind deliberately omitted
         )
     assert conn.calls == []
 
