@@ -18,6 +18,7 @@ from gubbi_common.auth.hydra import (
     HydraUnreachable,
     TokenClaims,
 )
+from gubbi_common.auth.prm import PRMUrlError, build_prm_metadata_url
 
 __all__ = [
     "GATEWAY_CONTRACT_VERSION",
@@ -28,10 +29,12 @@ __all__ = [
     "MAX_SKEW_SECONDS",
     "MalformedTimestampError",
     "MismatchedSignatureError",
+    "PRMUrlError",
     "SignatureError",
     "StaleSignatureError",
     "TokenClaims",
     "build_bearer_challenge",
+    "build_prm_metadata_url",
     "build_signature",
     "verify_signature",
 ]
