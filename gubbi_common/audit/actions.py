@@ -73,6 +73,14 @@ class Action(StrEnum):
     SUBSCRIPTION_UPDATED = "subscription.updated"
     SUBSCRIPTION_CANCELED = "subscription.canceled"
     SUBSCRIPTION_OVERRIDE = "subscription.override"
+    # Stripe webhook handlers wired in M2-M4 HIGH B4 (post-pin-bump). The
+    # enum members land in v0.10.0; the handler @audited(audit_fn=...)
+    # wiring lands in the consumer repo once the SHA-pin promotes them.
+    SUBSCRIPTION_TRIAL_ENDING_NOTICED = "subscription.trial_ending.noticed"
+    SUBSCRIPTION_PAYMENT_FAILED = "subscription.payment_failed"
+    SUBSCRIPTION_PAYMENT_SUCCEEDED = "subscription.payment_succeeded"
+    SUBSCRIPTION_PAYMENT_ACTION_REQUIRED = "subscription.payment_action_required"
+    CHECKOUT_EXPIRED = "checkout.session.expired"
 
     # ---------------------------------------------------------------
     # Billing gates
@@ -159,6 +167,13 @@ _CLOUD_REFERENCED: frozenset[str] = frozenset(
         "tenant.orphaned",  # in flight via tenant-audit task (kratos.py)
         "tenant.reactivated",  # planned cloud tenant lifecycle
         "tenant.suspended",  # planned cloud tenant lifecycle
+        # M2-M4 HIGH B4 Stripe handlers (defined here in v0.10.0; wired in
+        # cloud-api once the SHA-pin lands).
+        "checkout.session.expired",  # webhooks/stripe/handlers/checkout_expired.py (B4)
+        "subscription.payment_action_required",  # webhooks/stripe/handlers/payment_action_required.py (B4) # noqa: E501
+        "subscription.payment_failed",  # webhooks/stripe/handlers/invoice.py (B4)
+        "subscription.payment_succeeded",  # webhooks/stripe/handlers/invoice.py (B4)
+        "subscription.trial_ending.noticed",  # webhooks/stripe/handlers/subscription.py (B4)
     }
 )
 

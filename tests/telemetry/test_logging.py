@@ -491,8 +491,8 @@ def test_ensure_ascii_false_preserves_unicode() -> None:
 
 
 @pytest.mark.unit
-def test_version_is_091() -> None:
-    """v0.9.1 -- C-1/C-2 audit dedup fix-pass: restore mig-0020 INSERT column composition + TargetKind enum + drift-guards."""
+def test_version_is_0100() -> None:
+    """v0.10.0 -- M2-M4 HIGH B2: PRM helper + client_ip helper + 5 new Action members."""
     import gubbi_common
 
-    assert gubbi_common.__version__ == "0.9.1"
+    assert gubbi_common.__version__ == "0.10.0"

@@ -7,6 +7,75 @@ tag if they don't need the new surface. See
 release-tagging policy: not every commit gets a tag; tags mark stable
 adoption points.
 
+## 0.10.0 -- 2026-05-11
+
+### Added
+
+- ``gubbi_common.auth.prm.build_prm_metadata_url(resource_url, *,
+  legacy_suffix=True) -> str`` -- single source of truth for RFC 9728
+  Protected Resource Metadata URL composition. Validates the input is
+  an absolute http(s) URL (raises ``PRMUrlError`` otherwise),
+  normalises trailing slashes, and returns
+  ``<origin>/.well-known/oauth-protected-resource[/mcp]``. The
+  ``legacy_suffix=True`` default preserves DEC-083 cutover compat;
+  flipping the default to ``False`` is tracked as backlog item
+  ``prm-legacy-suffix-cutover``. Closes C-009 (PRM URL coherence broken
+  across cloud-api and gubbi: formula was duplicated across at least
+  four call sites with subtly different concatenation, no shared
+  helper). Re-exported from ``gubbi_common.auth``.
+- ``gubbi_common.http.client_ip(request, *, trust_forwarded_headers)
+  -> str | None`` -- DEC-086-locked client-IP extractor. RIGHTMOST
+  X-Forwarded-For when ``trust_forwarded_headers=True`` (the trusted
+  proxy stamp); socket address otherwise; ``None`` when neither is
+  available. Promoted verbatim from gubbi-cloud's
+  ``webhooks/kratos/_auth.py:_extract_client_ip`` to close the
+  recurring bug where the gubbi-side copy at ``oauth/forms.py``
+  silently flipped to LEFTMOST XFF (DEC-086 rule 4 violation).
+  ``trust_forwarded_headers`` is keyword-only by design so the policy
+  is per-call visible at every site.
+- 5 new ``Action`` enum members for the M4 Stripe webhook surface
+  (B4 wiring lands in cloud-api once the SHA-pin promotes them):
+  ``SUBSCRIPTION_TRIAL_ENDING_NOTICED`` (``subscription.trial_ending.noticed``),
+  ``SUBSCRIPTION_PAYMENT_FAILED`` (``subscription.payment_failed``),
+  ``SUBSCRIPTION_PAYMENT_SUCCEEDED`` (``subscription.payment_succeeded``),
+  ``SUBSCRIPTION_PAYMENT_ACTION_REQUIRED``
+  (``subscription.payment_action_required``), ``CHECKOUT_EXPIRED``
+  (``checkout.session.expired``). All five registered in
+  ``_CLOUD_REFERENCED`` with their planned cloud-side wiring sites.
+  ``test_action_iterable_count_guard`` count bumped from 29 to 34.
+
+### Tests
+
+- ``tests/auth/test_prm.py`` -- 7 cases covering legacy/canonical
+  shapes, trailing-slash normalisation, relative-URL rejection (raises
+  ``PRMUrlError``), and the gubbi self-host path-prefix shape.
+- ``tests/http/test_client_ip.py`` -- 9 cases covering rightmost-XFF
+  selection, fallback-on-invalid-IP, untrusted-header ignore, IPv6
+  parsing, whitespace XFF, and ``None`` when no source is recoverable.
+- ``tests/audit/test_actions.py::test_new_subscription_action_members_present``
+  -- pins the 5 new Stripe-webhook member names + values.
+
+### Cross-refs
+
+- C-009 (PRM URL coherence): ``gubbi_common.auth.prm.build_prm_metadata_url``
+  is the helper. Both cloud-api and gubbi consume it; the
+  ``legacy_suffix=True`` default is gated by DEC-083 cutover policy.
+- DEC-086 (client-IP extraction): ``gubbi_common.http.client_ip``
+  is the canonical implementation. Rule 4 (rightmost XFF when
+  trusted) is locked here.
+- M2-M4 HIGH B4 (Stripe ``@audited(audit_fn=...)`` retrofit) imports
+  the 5 new ``Action`` members; B4 is hard-blocked on this release
+  shipping and the SHA-pin landing in both consumers.
+
+### Consumer impact
+
+Additive. Two new helpers, 5 new Action members, no behaviour change
+for existing imports. Both consumers (gubbi, gubbi-cloud) re-pin to
+this SHA in a coordinated Wave 1.5 step (M2-M4 HIGH plan) and rewire
+4 call sites (auth_middleware, gubbi/main.py, oauth/forms.py,
+kratos/_auth.py) to the new helpers; the consumer rewires are tracked
+under B2-T5, NOT in this release.
+
 ## 0.9.1 -- 2026-05-11
 
 ### Fixed

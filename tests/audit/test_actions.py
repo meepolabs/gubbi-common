@@ -53,6 +53,21 @@ def test_subscription_lifecycle_values_present() -> None:
 
 
 @pytest.mark.unit
+def test_new_subscription_action_members_present() -> None:
+    """B2 (M2-M4 HIGH round) added 5 Stripe-webhook Action members in v0.10.0.
+
+    These land in the enum ahead of the consumer rewires (B4) so the
+    SHA-pin promotes them before the @audited(audit_fn=...) decorators
+    reference them.
+    """
+    assert Action.SUBSCRIPTION_TRIAL_ENDING_NOTICED == "subscription.trial_ending.noticed"
+    assert Action.SUBSCRIPTION_PAYMENT_FAILED == "subscription.payment_failed"
+    assert Action.SUBSCRIPTION_PAYMENT_SUCCEEDED == "subscription.payment_succeeded"
+    assert Action.SUBSCRIPTION_PAYMENT_ACTION_REQUIRED == "subscription.payment_action_required"
+    assert Action.CHECKOUT_EXPIRED == "checkout.session.expired"
+
+
+@pytest.mark.unit
 def test_billing_gate_values_present() -> None:
     assert Action.BILLING_EMAIL_UNVERIFIED_BLOCKED == "billing.email_unverified_blocked"
 
@@ -172,9 +187,9 @@ def test_action_iterable_count_guard() -> None:
     Action is intentionally added or removed (with a registry update).
     """
     members = list(Action)
-    assert len(members) == 29, (
+    assert len(members) == 34, (
         f"unexpected Action member count: {len(members)} "
-        "(expected exactly 29; update this guard when intentionally adding/removing an Action)"
+        "(expected exactly 34; update this guard when intentionally adding/removing an Action)"
     )
 
 
