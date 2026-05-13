@@ -23,9 +23,7 @@ import pytest
 
 from gubbi_common.audit.sql import (
     AUDIT_INSERT_DEDUPED_SQL,
-    AUDIT_INSERT_SHORT_SQL,
     AUDIT_INSERT_SQL,
-    AUDIT_INSERT_SQL_RICH,
 )
 
 if TYPE_CHECKING:
@@ -103,18 +101,6 @@ async def _assert_insert_covers_required(conn: asyncpg.Connection, sql: str) -> 
 async def test_audit_insert_sql_covers_all_audit_log_columns(pg_pool: asyncpg.Pool) -> None:
     async with pg_pool.acquire() as conn:
         await _assert_insert_covers_required(conn, AUDIT_INSERT_SQL)
-
-
-@pytest.mark.asyncio(loop_scope="session")
-async def test_audit_insert_short_sql_covers_required_columns(pg_pool: asyncpg.Pool) -> None:
-    async with pg_pool.acquire() as conn:
-        await _assert_insert_covers_required(conn, AUDIT_INSERT_SHORT_SQL)
-
-
-@pytest.mark.asyncio(loop_scope="session")
-async def test_audit_insert_sql_rich_covers_required_columns(pg_pool: asyncpg.Pool) -> None:
-    async with pg_pool.acquire() as conn:
-        await _assert_insert_covers_required(conn, AUDIT_INSERT_SQL_RICH)
 
 
 @pytest.mark.asyncio(loop_scope="session")

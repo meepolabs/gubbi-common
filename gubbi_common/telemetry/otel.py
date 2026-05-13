@@ -7,7 +7,9 @@ decision those auto-instrumentors live in consumer repos (e.g. gubbi-cloud).
 
 from __future__ import annotations
 
+import logging
 import os
+from collections.abc import Callable
 
 from opentelemetry import trace as _otel_trace
 from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
@@ -18,6 +20,14 @@ from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
+
+__all__ = [
+    "configure_otel",
+    "get_tracer",
+    "safe_instrument",
+]
+
+logger = logging.getLogger(__name__)
 
 _RESOURCE: Resource | None = None
 _TRACER: _otel_trace.Tracer | None = None
@@ -83,3 +93,31 @@ def get_tracer() -> _otel_trace.Tracer:
     if _TRACER is not None:
         return _TRACER
     return _otel_trace.get_tracer(__name__)
+
+
+def safe_instrument(name: str, factory: Callable[[], None]) -> None:
+    """Wire an auto-instrumentor inside a try/except + structured log.
+
+    Per-instrumentor failures must not cascade to startup: a broken
+    third-party instrumentor (driver missing, signature drift) should
+    degrade observability for that one library, not crash the service.
+    The helper logs a DEBUG line on the happy path so operators can
+    confirm wiring at startup, and a WARNING on failure naming the
+    instrumentor so the gap is operator-visible without breaking the
+    boot path.
+
+    Parameters
+    ----------
+    name:
+        Display name for the instrumentor (e.g. ``"FastAPI"``,
+        ``"HTTPX"``). Surfaced in both the success debug and the
+        failure warning.
+    factory:
+        Zero-arg callable that performs the instrumentation. Typically
+        a lambda over ``ThingInstrumentor().instrument()``.
+    """
+    try:
+        factory()
+        logger.debug("%s auto-instrumentation wired", name)
+    except Exception as exc:  # noqa: BLE001 -- defensive boundary, intent is broad swallow
+        logger.warning("%s instrumentor failed: %s", name, exc)
