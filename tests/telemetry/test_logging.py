@@ -491,8 +491,8 @@ def test_ensure_ascii_false_preserves_unicode() -> None:
 
 
 @pytest.mark.unit
-def test_version_is_0100() -> None:
-    """v0.10.0 -- M2-M4 HIGH B2: PRM helper + client_ip helper + 5 new Action members."""
+def test_version_is_0110() -> None:
+    """v0.11.0 -- A3 + A7 Q1: audit_log target_kind consolidation + safe_instrument helper."""
     import gubbi_common
 
-    assert gubbi_common.__version__ == "0.10.0"
+    assert gubbi_common.__version__ == "0.11.0"

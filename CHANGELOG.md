@@ -7,6 +7,59 @@ tag if they don't need the new surface. See
 release-tagging policy: not every commit gets a tag; tags mark stable
 adoption points.
 
+## 0.11.0 -- 2026-05-13
+
+### Added
+
+- ``gubbi_common.audit.sql.record_audit_deduped_async(...)`` -- typed
+  wrapper around ``AUDIT_INSERT_DEDUPED_SQL`` so dedup callers do not
+  have to write raw SQL with positional args. Applies actor_id
+  validation, banned-key metadata redaction, and metadata size cap.
+  Emits an ``audit.write`` OTel span. Closes the S2 LOW-1 footgun where
+  actor_id strings (``"stripe_webhook"`` / ``"kratos_webhook"``) bypass
+  ``_validate_audit_id`` when callers reach for the raw SQL constant.
+- ``gubbi_common.telemetry.otel.safe_instrument(name, factory)`` -- shared
+  wrapper for auto-instrumentor wiring. Logs a DEBUG line on success and
+  swallows + WARNINGs on failure so a broken instrumentor (driver
+  missing, signature drift) cannot crash startup. Both gubbi and
+  gubbi-cloud call this helper instead of duplicating per-instrumentor
+  try/except blocks (S8 H3 + S8 M-2). A7 Q1.
+
+### Changed
+
+- ``gubbi_common.audit.sql.AUDIT_INSERT_SQL`` is now the canonical
+  10-column INSERT including ``target_kind``. The argument was already
+  accepted by ``record_audit_async`` but silently dropped on the floor
+  -- it now persists on the row. Closes S2 MEDIUM (record_audit_async
+  target_kind footgun). A3 Q1.
+- ``record_audit_async`` now emits an ``audit.write`` OTel span carrying
+  ``event_type``, ``target_id``, ``actor_type``, ``success``, and
+  ``latency_ms`` (gubbi's existing span shape). Cloud webhook + admin
+  audit writes get spans for free without per-site instrumentation.
+  A3 Q1.
+
+### Removed
+
+- ``AUDIT_INSERT_SHORT_SQL`` -- the legacy 6-column shape used by the
+  pre-consolidation Kratos / billing call sites. All call sites migrated
+  to ``record_audit_async`` (canonical) or ``record_audit_deduped_async``
+  (dedup) in the A3 cross-repo bump.
+- ``AUDIT_INSERT_SQL_RICH`` -- the 7-column shape carrying
+  ``occurred_at`` for wire-timestamp parity. The DB default
+  ``occurred_at TIMESTAMPTZ NOT NULL DEFAULT now()`` covers the same
+  observation window with sub-millisecond drift; callers migrated to
+  the canonical writer.
+
+### Consumer impact
+
+- gubbi: drop the local ``_AUDIT_INSERT_SQL`` constant in
+  ``gubbi/audit/sql.py``; canonical path now lives in this package.
+  Bump the gubbi-common pin to 0.11.0.
+- gubbi-cloud: migrate every ``AUDIT_INSERT_SHORT_SQL`` /
+  ``AUDIT_INSERT_SQL_RICH`` call site off the raw constants to
+  ``record_audit_async`` / ``record_audit_deduped_async``. Bump the
+  gubbi-common pin to 0.11.0.
+
 ## 0.10.0 -- 2026-05-11
 
 ### Added
