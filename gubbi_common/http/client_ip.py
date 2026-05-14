@@ -6,7 +6,9 @@ IP is recoverable.
 
 Promoted from gubbi-cloud (``webhooks/kratos/_auth.py:_extract_client_ip``)
 to close H-A4: gubbi's local copy at ``oauth/forms.py:client_ip`` had
-silently flipped to LEFTMOST X-Forwarded-For (DEC-086 rule 4 violation).
+silently regressed away from the rightmost X-Forwarded-For entry
+(DEC-086 rule 4 violation -- it was reading the client-controllable
+leftmost hop instead of the trusted-proxy stamp).
 The correct implementation has been written multiple times and gotten
 subtly wrong each time; one helper, byte-identical, signed-off in
 DEC-086 prose, kills the recurrence.
