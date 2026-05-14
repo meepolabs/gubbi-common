@@ -2,7 +2,7 @@ name: test
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, develop]
   push:
     branches: [main, develop]
 
@@ -41,6 +41,11 @@ jobs:
         if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
         run: poetry install --no-interaction --extras db
 
+      # Purity lint runs first: a runtime-import-of-framework violation
+      # should fail the build before slower static-analysis steps.
+      - name: gubbi-common purity lint (B5 Q3)
+        run: poetry run python tools/check_gubbi_common_purity.py
+
       - name: ruff check
         run: poetry run ruff check gubbi_common/ tests/
 
@@ -49,9 +54,6 @@ jobs:
 
       - name: mypy
         run: poetry run mypy gubbi_common/
-
-      - name: gubbi-common purity lint (B5 Q3)
-        run: poetry run python tools/check_gubbi_common_purity.py
 
   test:
     name: test (py312)

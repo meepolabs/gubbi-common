@@ -65,6 +65,15 @@ class CorrelationContext:
     The dataclass is ``frozen`` so instances are hashable and safe to
     pass through awaitables without accidental mutation. ``slots`` keeps
     the per-request allocation cheap.
+
+    **Status (B5 R1, 2026-05-14): forward-compat shape.** Today's
+    consumers (gubbi-cloud auth + subscription middleware) use
+    ``cid_from_scope`` directly and pass the raw string through. The
+    dataclass exists so future plumbing that wants typed propagation
+    (e.g. a request-scoped contextvar carrying multiple correlation
+    fields, or a shared ``CorrelationCarrier`` Protocol) has a single
+    canonical home rather than re-shaping ad-hoc. Drop the dataclass
+    if no consumer adopts it by 2026-Q3.
     """
 
     correlation_id: str

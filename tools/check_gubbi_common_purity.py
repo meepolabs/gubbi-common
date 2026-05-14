@@ -64,6 +64,13 @@ DENY_LIST: frozenset[str] = frozenset(
         "stripe",
         "pgvector",
         "bcrypt",
+        # R1 fix-pass (2026-05-14): extend to cover sibling-repo runtime
+        # deps that could leak into gubbi-common as silently as the
+        # original 13. Use the IMPORT name, not the distribution name --
+        # PyJWT installs as ``jwt``; cryptography is the same.
+        "jwt",
+        "cryptography",
+        "psycopg",
     }
 )
 
@@ -129,14 +136,25 @@ def _root_module(name: str) -> str:
 def _is_type_checking_test(test: ast.expr) -> bool:
     """Return True if ``test`` is the ``TYPE_CHECKING`` boolean expression.
 
-    Recognises both forms used in practice::
+    Recognises only the canonical forms (R1 fix-pass: tightened from
+    matching any ``*.TYPE_CHECKING`` to only the canonical typing-module
+    references)::
 
-        if TYPE_CHECKING:           # bare name (most common)
-        if typing.TYPE_CHECKING:    # qualified attribute access
+        if TYPE_CHECKING:                  # bare name (most common)
+        if typing.TYPE_CHECKING:           # qualified attribute access
+
+    A runtime guard like ``if some_obj.TYPE_CHECKING:`` no longer slips
+    through -- the attribute branch now requires the value being
+    accessed to be the ``typing`` module exactly.
     """
     if isinstance(test, ast.Name) and test.id == "TYPE_CHECKING":
         return True
-    return isinstance(test, ast.Attribute) and test.attr == "TYPE_CHECKING"
+    return (
+        isinstance(test, ast.Attribute)
+        and test.attr == "TYPE_CHECKING"
+        and isinstance(test.value, ast.Name)
+        and test.value.id == "typing"
+    )
 
 
 def parse_imports(source: str, rel_path: str) -> list[Violation]:

@@ -170,6 +170,32 @@ def test_qualified_type_checking_attribute_is_recognised() -> None:
 
 
 @pytest.mark.unit
+def test_non_typing_attribute_named_type_checking_is_runtime() -> None:
+    """R1 fix-pass guard: only ``typing.TYPE_CHECKING`` (or bare) is exempt.
+
+    A runtime guard like ``if some_obj.TYPE_CHECKING:`` must NOT bypass
+    the lint -- ``some_obj`` may be a runtime-truthy attribute. Pre-fix
+    the helper matched any ``*.TYPE_CHECKING`` attribute access; this
+    test pins the tightened contract.
+    """
+    source = textwrap.dedent(
+        """
+        from __future__ import annotations
+
+        class Sneaky:
+            TYPE_CHECKING = True
+
+        sneaky = Sneaky()
+        if sneaky.TYPE_CHECKING:
+            import httpx
+        """
+    )
+    violations = parse_imports(source, "sneaky.py")
+    assert len(violations) == 1
+    assert violations[0].imported == "httpx"
+
+
+@pytest.mark.unit
 def test_import_inside_function_body_is_runtime() -> None:
     """A deferred import inside a def is still runtime when called."""
     source = textwrap.dedent(
@@ -226,6 +252,11 @@ def test_deny_list_includes_expected_packages() -> None:
         "stripe",
         "pgvector",
         "bcrypt",
+        # R1 fix-pass extension: cover sibling-repo runtime deps.
+        # Use the IMPORT name (PyJWT installs as ``jwt``).
+        "jwt",
+        "cryptography",
+        "psycopg",
     }
     assert set(DENY_LIST) == expected
 
