@@ -19,7 +19,7 @@ def _run_in_subprocess(code: str) -> subprocess.CompletedProcess[str]:
     )
 
 
-# ── Helper scripts executed in isolated processes ───────────────────────────
+# - Helper scripts executed in isolated processes ---------------------------
 
 _ENABLED_SCRIPT = """\
 from gubbi_common.telemetry.otel import configure_otel
@@ -61,6 +61,70 @@ configured = m._TRACER
 returned = get_tracer()
 print(configured is returned)
 print(returned is not None)
+"""
+
+# S8 M-1: in-process default for service.version + deployment.environment.
+# OTEL_RESOURCE_ATTRIBUTES is unset in this script so the kwargs win.
+_VERSION_ENV_DEFAULT_SCRIPT = """\
+import os
+os.environ.pop("OTEL_RESOURCE_ATTRIBUTES", None)
+from gubbi_common.telemetry.otel import configure_otel
+configure_otel(
+    "ver-svc",
+    "http://localhost:4317",
+    enabled=False,
+    service_version="1.2.3",
+    deployment_environment="staging",
+)
+import gubbi_common.telemetry.otel as m
+attrs = dict(m._RESOURCE.attributes)
+print(attrs.get("service.name"))
+print(attrs.get("service.version"))
+print(attrs.get("deployment.environment"))
+"""
+
+# S8 M-1: env override overlays the kwargs (per OTel spec). The env value
+# for ``deployment.environment`` must win even when the kwarg sets a
+# different value.
+_VERSION_ENV_OVERRIDE_SCRIPT = """\
+import os
+os.environ["OTEL_RESOURCE_ATTRIBUTES"] = (
+    "deployment.environment=production,custom.attr=xyz"
+)
+from gubbi_common.telemetry.otel import configure_otel
+configure_otel(
+    "override-svc",
+    "http://localhost:4317",
+    enabled=False,
+    service_version="9.9.9",
+    deployment_environment="staging",  # kwarg says staging
+)
+import gubbi_common.telemetry.otel as m
+attrs = dict(m._RESOURCE.attributes)
+print(attrs.get("service.name"))
+print(attrs.get("service.version"))
+# Env value MUST win:
+print(attrs.get("deployment.environment"))
+print(attrs.get("custom.attr"))
+"""
+
+# S8 M-1: omitting both new kwargs leaves the resource without those keys
+# unless OTEL_RESOURCE_ATTRIBUTES sets them. Pre-B3 callers stay
+# observationally identical.
+_NO_VERSION_KWARGS_SCRIPT = """\
+import os
+os.environ.pop("OTEL_RESOURCE_ATTRIBUTES", None)
+from gubbi_common.telemetry.otel import configure_otel
+configure_otel("legacy-svc", "http://localhost:4317", enabled=False)
+import gubbi_common.telemetry.otel as m
+attrs = dict(m._RESOURCE.attributes)
+print(attrs.get("service.name"))
+print("MISSING" if attrs.get("service.version") is None else attrs.get("service.version"))
+print(
+    "MISSING"
+    if attrs.get("deployment.environment") is None
+    else attrs.get("deployment.environment")
+)
 """
 
 
@@ -114,3 +178,53 @@ class TestGetTracer:
         lines = [line.strip() for line in result.stdout.strip().splitlines()]
         assert lines[0] == "True"  # configured is returned
         assert lines[1] == "True"  # not None
+
+
+class TestServiceVersionAndDeploymentEnv:
+    """S8 M-1 (B3): service.version + deployment.environment resource attrs."""
+
+    def test_kwargs_populate_resource_attributes(self) -> None:
+        """Caller-supplied kwargs land on the Resource as default attrs.
+
+        Without an OTEL_RESOURCE_ATTRIBUTES override, the in-process
+        defaults from configure_otel kwargs win.
+        """
+        result = _run_in_subprocess(_VERSION_ENV_DEFAULT_SCRIPT)
+        assert (
+            result.returncode == 0
+        ), f"child failed\nstdout={result.stdout}\nstderr={result.stderr}"
+        lines = [line.strip() for line in result.stdout.strip().splitlines()]
+        assert len(lines) >= 3
+        assert lines[0] == "ver-svc"
+        assert lines[1] == "1.2.3"
+        assert lines[2] == "staging"
+
+    def test_env_override_wins_over_kwarg(self) -> None:
+        """OTEL_RESOURCE_ATTRIBUTES overlays the kwarg defaults (OTel spec).
+
+        deployment.environment kwarg=staging but env=production -> env wins.
+        Custom attrs from env are preserved alongside.
+        """
+        result = _run_in_subprocess(_VERSION_ENV_OVERRIDE_SCRIPT)
+        assert (
+            result.returncode == 0
+        ), f"child failed\nstdout={result.stdout}\nstderr={result.stderr}"
+        lines = [line.strip() for line in result.stdout.strip().splitlines()]
+        assert len(lines) >= 4
+        assert lines[0] == "override-svc"
+        assert lines[1] == "9.9.9"  # service.version kwarg (no env override for this key)
+        assert lines[2] == "production"  # env wins over the staging kwarg
+        assert lines[3] == "xyz"  # custom env attr preserved
+
+    def test_omitting_kwargs_leaves_attrs_unset(self) -> None:
+        """Pre-B3 call sites (no kwargs, no OTEL_RESOURCE_ATTRIBUTES) get
+        only ``service.name`` -- backward-compatible default."""
+        result = _run_in_subprocess(_NO_VERSION_KWARGS_SCRIPT)
+        assert (
+            result.returncode == 0
+        ), f"child failed\nstdout={result.stdout}\nstderr={result.stderr}"
+        lines = [line.strip() for line in result.stdout.strip().splitlines()]
+        assert len(lines) >= 3
+        assert lines[0] == "legacy-svc"
+        assert lines[1] == "MISSING"
+        assert lines[2] == "MISSING"

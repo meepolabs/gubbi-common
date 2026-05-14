@@ -38,6 +38,8 @@ def configure_otel(
     endpoint: str,
     *,
     enabled: bool = True,
+    service_version: str | None = None,
+    deployment_environment: str | None = None,
 ) -> None:
     """Configure the OTel SDK without cloud-specific auto-instrumentors.
 
@@ -48,12 +50,34 @@ def configure_otel(
     * Otherwise configures an ``OTLPSpanExporter`` +
       ``OTLPMetricExporter`` pointed at *endpoint* (the local otel-collector
       gRPC port).
+
+    Resource attributes (S8 M-1):
+
+    * ``service.name`` -- always set from the *service_name* arg.
+    * ``service.version`` -- set when *service_version* is provided.
+      Callers pass ``__version__`` from their package (gubbi/gubbi-cloud).
+    * ``deployment.environment`` -- set when *deployment_environment* is
+      provided. Callers pass ``settings.app_env`` (dev/ci/staging/production).
+
+    ``OTEL_RESOURCE_ATTRIBUTES`` env var entries OVERLAY the defaults
+    (per OTel spec). A deploy-time override of e.g.
+    ``deployment.environment=staging`` always wins over the in-process
+    default. Without the in-process defaults, HyperDX traces carry no
+    ``service.version`` or ``deployment.environment`` tag because neither
+    Dockerfile nor Kamal config sets ``OTEL_RESOURCE_ATTRIBUTES`` today.
     """
-    resource_attributes = {
+    resource_attributes: dict[str, str] = {
         "service.name": service_name,
     }
+    if service_version is not None:
+        resource_attributes["service.version"] = service_version
+    if deployment_environment is not None:
+        resource_attributes["deployment.environment"] = deployment_environment
 
     # OTEL_RESOURCE_ATTRIBUTES : key1=val1,key2=val2, ...
+    # Env values OVERLAY the in-process defaults: a deploy that sets
+    # ``deployment.environment=staging`` in OTEL_RESOURCE_ATTRIBUTES wins
+    # over whatever the caller passed via the kwarg.
     raw = os.environ.get("OTEL_RESOURCE_ATTRIBUTES", "")
     for kv in raw.split(","):
         kv = kv.strip()
