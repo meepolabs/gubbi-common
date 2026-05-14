@@ -7,6 +7,47 @@ tag if they don't need the new surface. See
 release-tagging policy: not every commit gets a tag; tags mark stable
 adoption points.
 
+## 0.13.0 -- 2026-05-14
+
+### Added
+
+- ``gubbi_common.correlation`` -- canonical home for the
+  ``correlation_id`` envelope shape. Exposes ``CorrelationContext``
+  (frozen dataclass; one ``correlation_id: str`` field today, deliberate
+  YAGNI on extra fields), ``cid_from_scope(scope)`` (centralises the
+  ASGI-scope byte-iteration helper that gubbi-cloud's auth_middleware
+  and subscription_middleware previously duplicated), and re-exports of
+  ``set_correlation_id`` / ``get_correlation_id`` /
+  ``reset_correlation_id`` (canonical contextvar handles, aliased from
+  ``gubbi_common.telemetry.logging`` so downstream code has one import
+  point). Closes B5 Q1=A.
+- ``tools/check_gubbi_common_purity.py`` -- new lint script: walks
+  every ``.py`` file under ``gubbi_common/`` and FAILS CI on any
+  RUNTIME import from a deny-list of framework packages (fastapi,
+  starlette, uvicorn, sqlalchemy, redis, asyncpg, anthropic, arq,
+  httpx, mcp, stripe, pgvector, bcrypt). Imports inside
+  ``if TYPE_CHECKING:`` are exempt; the ``else:`` branch is treated as
+  RUNTIME (it IS runtime). One ALLOW exception is documented inline
+  for ``db/user_scoped.py`` (asyncpg is required at runtime there;
+  declared as the ``[db]`` optional extra in pyproject). Wired into
+  ``.github/workflows/test.yml`` as a lint-job step. Closes B5 Q3=A+C.
+
+### Changed
+
+- ``gubbi_common.middleware.correlation`` -- ``starlette.types``
+  imports moved under ``if TYPE_CHECKING:``. Functionally a no-op
+  (those are pure type aliases), but the module is now starlette-free
+  at runtime per the new purity rule.
+
+### Consumer impact
+
+Both gubbi and gubbi-cloud should bump their ``gubbi-common`` git pin
+to this tag and import correlation_id helpers from
+``gubbi_common.correlation`` going forward.
+``gubbi_common.telemetry.logging`` continues to expose the same
+helpers; the new module just adds a single canonical import point and
+the typed envelope.
+
 ## 0.12.0 -- 2026-05-14
 
 ### Added
