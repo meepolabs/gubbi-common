@@ -49,7 +49,9 @@ class TargetKind(StrEnum):
     # Identity / billing kinds (wired in gubbi + gubbi-cloud)
     # ---------------------------------------------------------------
     USER = "user"
+    TENANT = "tenant"
     SUBSCRIPTION = "subscription"
+    OAUTH_CLIENT = "oauth_client"
 
     def __str__(self) -> str:
         # Lock 3.11 / 3.12 parity: without this override, 3.11's StrEnum
@@ -92,5 +94,7 @@ _CLOUD_TARGET_KINDS: Final[frozenset[TargetKind]] = frozenset(
         # --- Currently wired in cloud-api production + test code ---
         TargetKind.SUBSCRIPTION,  # gubbi-cloud/gubbi_cloud/webhooks/stripe/_helpers.py
         TargetKind.USER,  # gubbi-cloud/gubbi_cloud/webhooks/kratos/handlers/identity_updated.py
+        TargetKind.TENANT,  # gubbi-cloud/gubbi_cloud/services/admin/llm_budget.py
+        TargetKind.OAUTH_CLIENT,  # gubbi-cloud/gubbi_cloud/admin/test_cleanup.py
     }
 )

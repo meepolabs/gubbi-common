@@ -18,6 +18,7 @@ from gubbi_common.telemetry.logging import (
 from gubbi_common.telemetry.otel import (
     configure_otel,
     get_tracer,
+    safe_instrument,
 )
 
 # `_get_otel_ids` remains accessible via explicit
@@ -34,6 +35,7 @@ __all__ = [
     "initialize_logger",
     "is_banned_key",
     "reset_correlation_id",
+    "safe_instrument",
     "safe_set_attributes",
     "set_correlation_id",
 ]

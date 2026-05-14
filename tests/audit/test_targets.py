@@ -33,7 +33,9 @@ def test_journal_content_kinds_present() -> None:
 @pytest.mark.unit
 def test_identity_billing_kinds_present() -> None:
     assert TargetKind.USER == "user"
+    assert TargetKind.TENANT == "tenant"
     assert TargetKind.SUBSCRIPTION == "subscription"
+    assert TargetKind.OAUTH_CLIENT == "oauth_client"
 
 
 @pytest.mark.unit

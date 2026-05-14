@@ -12,11 +12,14 @@ the default ``pytest`` invocation while still letting a release-time CI
 job exercise these tests with one extra env var.
 
 Schema vendored here MUST mirror gubbi's Alembic migration chain through
-0020 (which adds ``target_kind`` and rebuilds the partial unique index
-for audit dedup) -- update both together. ``MIGRATION_DDL_PATH`` points
-at the gubbi migrations directory; tests that compare the vendored DDL
-against the upstream string skip if that path is absent (e.g. when the
-gubbi-common repo is checked out without the gubbi sibling).
+0029 (mig 0020 adds ``target_kind`` and rebuilds the partial unique
+index for audit dedup; mig 0029 adds the
+``audit_log_target_kind_invariant`` CHECK constraint enforcing
+``target_id IS NULL OR target_kind IS NOT NULL``) -- update both
+together. ``MIGRATION_DDL_PATH`` points at the gubbi migrations
+directory; tests that compare the vendored DDL against the upstream
+string skip if that path is absent (e.g. when the gubbi-common repo is
+checked out without the gubbi sibling).
 """
 
 from __future__ import annotations
@@ -52,7 +55,7 @@ MIGRATION_DDL_PATH = (
 )
 
 
-# Mirror of gubbi/migrations through 0022 -- update both together.
+# Mirror of gubbi/migrations through 0029 -- update both together.
 # Migration 0020 added the ``target_kind`` column and rebuilt the
 # ``audit_log_content_hash_uidx`` partial unique index with
 # ``target_kind`` as the leading column.  That partial unique index is
@@ -60,6 +63,17 @@ MIGRATION_DDL_PATH = (
 # clause. Migration 0021 swaps a perf index (not reflected here; the
 # DDL pulls in only what the dedup/drift tests need). Migration 0022
 # converts ``id`` from BIGSERIAL to GENERATED ALWAYS AS IDENTITY.
+# Migration 0028 adds the ``actor_id <> target_id`` self-attribution
+# guard (CHECK constraint -- not reflected here; gubbi-common tests do
+# not insert rows that would trip it). Migration 0029 adds the
+# ``audit_log_target_kind_invariant`` CHECK constraint enforcing
+# ``target_id IS NULL OR target_kind IS NOT NULL`` -- the DB-level
+# belt-and-braces guard for the same invariant the Python boundary
+# enforces in ``record_audit_async``.  We use ``ADD CONSTRAINT IF NOT
+# EXISTS ... NOT VALID`` followed by ``VALIDATE CONSTRAINT`` to mirror
+# the migration shape so the probe-side check (``convalidated = true``)
+# fires identically against this vendored schema as it does against a
+# real Alembic upgrade.
 AUDIT_LOG_DDL = """
 CREATE TABLE IF NOT EXISTS audit_log (
     id           BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -79,6 +93,29 @@ CREATE TABLE IF NOT EXISTS audit_log (
 CREATE UNIQUE INDEX IF NOT EXISTS audit_log_content_hash_uidx
     ON audit_log (target_kind, target_id, action, (metadata->>'content_hash'))
     WHERE metadata ? 'content_hash';
+
+-- Migration 0029: target_id requires target_kind invariant. PG has no
+-- ``ALTER TABLE ... ADD CONSTRAINT IF NOT EXISTS`` for CHECK
+-- constraints, so we guard with a DO block to keep the vendored DDL
+-- idempotent across container reuses. ``VALIDATE CONSTRAINT`` is
+-- unconditional inside the block so ``convalidated`` is true for any
+-- probe-side check that filters on it.
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint c
+        JOIN pg_namespace n ON n.oid = c.connamespace
+        WHERE c.conname = 'audit_log_target_kind_invariant'
+          AND n.nspname = current_schema()
+    ) THEN
+        ALTER TABLE audit_log
+            ADD CONSTRAINT audit_log_target_kind_invariant
+            CHECK (target_id IS NULL OR target_kind IS NOT NULL) NOT VALID;
+        ALTER TABLE audit_log VALIDATE CONSTRAINT audit_log_target_kind_invariant;
+    END IF;
+END
+$$;
 """
 
 
@@ -91,7 +128,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS audit_log_content_hash_uidx
 # it is <= this string. A newer migration than the based-on guard means
 # ``AUDIT_LOG_DDL`` is stale and dedup tests are exercising a
 # pre-migration shape.
-AUDIT_LOG_DDL_BASED_ON: Final[str] = "20260503_0022"
+AUDIT_LOG_DDL_BASED_ON: Final[str] = "20260513_0029"
 
 
 def _integration_enabled() -> bool:
