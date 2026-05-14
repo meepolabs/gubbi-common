@@ -17,24 +17,28 @@ Both consumers share the same core behaviour:
    consumer can route through its own per-repo OTel allowlist without
    this module depending on OpenTelemetry directly.
 
-``starlette`` provides the ASGI type imports used here. As of
-gubbi-common v0.7.0 it is declared as a direct runtime dependency in
-``pyproject.toml``.
+``starlette`` provides the ASGI type imports used here. They are
+imported inside a ``TYPE_CHECKING`` guard so gubbi-common does not pull
+``starlette`` at runtime (B5 Q3 purity rule). The ASGI middleware itself
+does not need anything from ``starlette`` at runtime; it operates on
+plain ASGI scope/receive/send callables typed via ``starlette.types``
+purely as aliases.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable, MutableMapping
 from contextvars import Token
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
-
-from starlette.types import ASGIApp, Receive, Scope, Send
 
 from gubbi_common.telemetry.logging import (
     reset_correlation_id,
     set_correlation_id,
 )
+
+if TYPE_CHECKING:
+    from starlette.types import ASGIApp, Receive, Scope, Send
 
 HEADER_NAME_BYTES = b"x-correlation-id"
 HEADER_NAME_STR = "X-Correlation-ID"
