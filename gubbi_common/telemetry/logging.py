@@ -31,10 +31,13 @@ import os
 from contextvars import ContextVar, Token
 from datetime import UTC, datetime
 from logging import handlers
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import structlog
 from structlog.types import EventDict, WrappedLogger
+
+if TYPE_CHECKING:
+    from opentelemetry.trace import Span
 
 # ---------------------------------------------------------------------------
 # Correlation ID context var
@@ -338,7 +341,7 @@ def _add_otel_context(
     return event_dict
 
 
-def trace_get_current_span() -> Any:
+def trace_get_current_span() -> Span:
     """Resolve OTel's ``get_current_span`` at call time.
 
     Test harnesses can monkeypatch ``opentelemetry.trace.get_current_span``
@@ -347,7 +350,8 @@ def trace_get_current_span() -> Any:
     """
     from opentelemetry import trace
 
-    return trace.get_current_span()
+    span: Span = trace.get_current_span()
+    return span
 
 
 # Shared processors used by both structlog and ProcessorFormatter
