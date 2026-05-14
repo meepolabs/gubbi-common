@@ -7,6 +7,44 @@ tag if they don't need the new surface. See
 release-tagging policy: not every commit gets a tag; tags mark stable
 adoption points.
 
+## 0.12.0 -- 2026-05-14
+
+### Added
+
+- ``gubbi_common.telemetry.otel.configure_otel(...)`` accepts new
+  ``service_version`` and ``deployment_environment`` kwargs. Both are
+  applied to the OTel ``Resource`` defaults; ``OTEL_RESOURCE_ATTRIBUTES``
+  env var still overlays per OTel spec. Default to ``None`` so existing
+  callers continue to work without changes -- pass each repo's
+  ``__version__`` and ``settings.app_env`` to enable per-deploy /
+  per-env trace slicing in HyperDX.
+
+### Changed
+
+- mypy flag set converged across the three Python repos (B4 Q1=A): added
+  ``disallow_untyped_calls``, ``disallow_any_generics``,
+  ``strict_equality``, ``extra_checks``, ``no_implicit_reexport``. No
+  fix-up sites needed in gubbi-common -- the new flags passed cleanly.
+- ``trace_get_current_span()`` return annotated as ``Span`` (was
+  inferred ``Any``). B4 Q2 closing C2 MEDIUM #10.
+
+### Docs
+
+- ``client_ip.py`` module docstring: rephrase the historical-bug note
+  around "rightmost XFF (DEC-086 rule 4)" -- the prior wording said
+  "leftmost" in a context that misled future readers about the fix
+  direction.
+- New regression test ``tests/telemetry/test_allowlist.py::test_content_hash_is_not_banned``
+  pins the audit-log dedup key against future changes to
+  ``DERIVATIVE_MODIFIERS`` or the order-of-checks in ``is_banned_key``.
+
+**Consumer impact:** gubbi + gubbi-cloud should bump their pin to this
+version to pick up the new ``configure_otel()`` kwargs. The kwargs are
+optional with safe defaults, so consumers that don't pass them get
+identical behavior to 0.11.0.
+
+---
+
 ## 0.11.0 -- 2026-05-13
 
 ### Added
