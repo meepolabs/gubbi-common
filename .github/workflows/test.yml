@@ -50,6 +50,9 @@ jobs:
       - name: mypy
         run: poetry run mypy gubbi_common/
 
+      - name: gubbi-common purity lint (B5 Q3)
+        run: poetry run python tools/check_gubbi_common_purity.py
+
   test:
     name: test (py312)
     runs-on: ubuntu-latest
