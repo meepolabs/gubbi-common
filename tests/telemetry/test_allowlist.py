@@ -380,3 +380,36 @@ def test_is_banned_key_uppercase_derivative_still_exempt() -> None:
     # email_hash is exempt (email is not a NEVER_EXEMPT base, _hash is derivative).
     assert not is_banned_key("EMAIL_HASH")
     assert not is_banned_key("Body_Size")
+
+
+# ===========================================================================
+# Regression: content_hash must survive the substring check
+# ===========================================================================
+
+
+@pytest.mark.unit
+def test_content_hash_is_not_banned() -> None:
+    """``content_hash`` must pass the filter -- it is the audit-log dedup key.
+
+    ``content`` is a BANNED_KEYS substring (raw journal content is never
+    allowed in spans/metrics). ``content_hash`` is the sha256 digest used
+    by the partial unique index ``audit_log_content_hash_uidx`` (gubbi
+    migration 0020) and is structurally privacy-safe.
+
+    Protection is structural via the ``_hash`` derivative-modifier
+    suffix; this regression test pins it so a future tweak to
+    DERIVATIVE_MODIFIERS or to the order-of-checks in ``is_banned_key``
+    cannot silently start dropping the audit-dedup key.
+    """
+    from gubbi_common.telemetry import is_banned_key
+
+    assert not is_banned_key("content_hash"), (
+        "content_hash is the audit-log dedup key (mig 0020) and must "
+        "survive BANNED_KEYS substring expansion via the _hash "
+        "derivative-modifier exemption"
+    )
+    # Plain "content" remains banned -- the substring contract is intact.
+    assert is_banned_key("content")
+    # Case-insensitive variants must also survive.
+    assert not is_banned_key("Content_Hash")
+    assert not is_banned_key("CONTENT_HASH")
