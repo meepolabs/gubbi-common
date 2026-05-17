@@ -12,13 +12,15 @@ the default ``pytest`` invocation while still letting a release-time CI
 job exercise these tests with one extra env var.
 
 Schema vendored here MUST mirror gubbi's Alembic migration chain through
-0029 (mig 0020 adds ``target_kind`` and rebuilds the partial unique
+0031 (mig 0020 adds ``target_kind`` and rebuilds the partial unique
 index for audit dedup; mig 0029 adds the
 ``audit_log_target_kind_invariant`` CHECK constraint enforcing
-``target_id IS NULL OR target_kind IS NOT NULL``) -- update both
-together. ``MIGRATION_DDL_PATH`` points at the gubbi migrations
-directory; tests that compare the vendored DDL against the upstream
-string skip if that path is absent (e.g. when the gubbi-common repo is
+``target_id IS NULL OR target_kind IS NOT NULL``; mig 0031 prepends
+``actor_id`` to the dedup index to close the cross-actor false-collision
+tampering vector) -- update both together. ``MIGRATION_DDL_PATH`` points
+at the gubbi migrations directory; tests that compare the vendored DDL
+against the upstream string skip if that path is absent (e.g. when the
+gubbi-common repo is
 checked out without the gubbi sibling).
 """
 
@@ -55,17 +57,22 @@ MIGRATION_DDL_PATH = (
 )
 
 
-# Mirror of gubbi/migrations through 0029 -- update both together.
+# Mirror of gubbi/migrations through 0031 -- update both together.
 # Migration 0020 added the ``target_kind`` column and rebuilt the
 # ``audit_log_content_hash_uidx`` partial unique index with
-# ``target_kind`` as the leading column.  That partial unique index is
-# the substrate for ``AUDIT_INSERT_DEDUPED_SQL``'s ``ON CONFLICT``
-# clause. Migration 0021 swaps a perf index (not reflected here; the
-# DDL pulls in only what the dedup/drift tests need). Migration 0022
-# converts ``id`` from BIGSERIAL to GENERATED ALWAYS AS IDENTITY.
-# Migration 0028 adds the ``actor_id <> target_id`` self-attribution
-# guard (CHECK constraint -- not reflected here; gubbi-common tests do
-# not insert rows that would trip it). Migration 0029 adds the
+# ``target_kind`` as the leading column.  Migration 0031 prepends
+# ``actor_id`` to that 4-tuple to close the cross-actor false-collision
+# tampering vector (two actors with the same content_hash would have
+# collided pre-0031, silently dropping the second row under the
+# ``ON CONFLICT DO NOTHING`` path that cloud-api uses for webhook
+# idempotency). The 5-column partial unique index is the substrate for
+# ``AUDIT_INSERT_DEDUPED_SQL``'s ``ON CONFLICT`` clause. Migration 0021
+# swaps a perf index (not reflected here; the DDL pulls in only what
+# the dedup/drift tests need). Migration 0022 converts ``id`` from
+# BIGSERIAL to GENERATED ALWAYS AS IDENTITY. Migration 0028 adds the
+# ``actor_id <> target_id`` self-attribution guard (CHECK constraint
+# -- not reflected here; gubbi-common tests do not insert rows that
+# would trip it). Migration 0029 adds the
 # ``audit_log_target_kind_invariant`` CHECK constraint enforcing
 # ``target_id IS NULL OR target_kind IS NOT NULL`` -- the DB-level
 # belt-and-braces guard for the same invariant the Python boundary
@@ -91,7 +98,7 @@ CREATE TABLE IF NOT EXISTS audit_log (
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS audit_log_content_hash_uidx
-    ON audit_log (target_kind, target_id, action, (metadata->>'content_hash'))
+    ON audit_log (actor_id, target_kind, target_id, action, (metadata->>'content_hash'))
     WHERE metadata ? 'content_hash';
 
 -- Migration 0029: target_id requires target_kind invariant. PG has no
@@ -128,7 +135,7 @@ $$;
 # it is <= this string. A newer migration than the based-on guard means
 # ``AUDIT_LOG_DDL`` is stale and dedup tests are exercising a
 # pre-migration shape.
-AUDIT_LOG_DDL_BASED_ON: Final[str] = "20260513_0029"
+AUDIT_LOG_DDL_BASED_ON: Final[str] = "20260516_0031"
 
 
 def _integration_enabled() -> bool:

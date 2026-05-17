@@ -110,17 +110,21 @@ async def test_audit_insert_deduped_sql_covers_required_columns(pg_pool: asyncpg
 
 
 # ---------------------------------------------------------------------------
-# Partial-unique-index column composition drift guard (mig 0020).
+# Partial-unique-index column composition drift guard (mig 0020 + 0031).
 # ---------------------------------------------------------------------------
 # The ``audit_log_content_hash_uidx`` partial unique index is the
 # substrate for ``AUDIT_INSERT_DEDUPED_SQL``'s ON CONFLICT clause. Its
 # column composition is keyed on
-# ``(target_kind, target_id, action, metadata->>'content_hash')`` with
-# the partial predicate ``WHERE metadata ? 'content_hash'``. A future
-# migration that rebuilds this index with a different column order or
-# predicate would silently break dedup at write time (42P10) without
-# this test firing.
-_EXPECTED_INDEX_COL_TUPLE: tuple[str, str, str, str] = (
+# ``(actor_id, target_kind, target_id, action,
+# metadata->>'content_hash')`` with the partial predicate
+# ``WHERE metadata ? 'content_hash'``. Migration 0020 added
+# ``target_kind`` as the leading column; migration 0031 prepended
+# ``actor_id`` to close a cross-actor false-collision tampering vector.
+# A future migration that rebuilds this index with a different column
+# order or predicate would silently break dedup at write time (42P10)
+# without this test firing.
+_EXPECTED_INDEX_COL_TUPLE: tuple[str, str, str, str, str] = (
+    "actor_id",
     "target_kind",
     "target_id",
     "action",
@@ -130,12 +134,12 @@ _EXPECTED_INDEX_COL_TUPLE: tuple[str, str, str, str] = (
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_dedup_unique_index_column_composition(pg_pool: asyncpg.Pool) -> None:
-    """Pin the 4-tuple of columns / expressions on ``audit_log_content_hash_uidx``.
+    """Pin the 5-tuple of columns / expressions on ``audit_log_content_hash_uidx``.
 
     Walks ``pg_index.indkey`` and resolves attnums via ``pg_attribute``;
     indexed expressions (attnum=0) are rendered via
     ``pg_get_indexdef(indexrelid, position, true)``. The last element of
-    the 4-tuple is an expression (``metadata->>'content_hash'``);
+    the 5-tuple is an expression (``metadata->>'content_hash'``);
     asserted via substring match because the renderer's exact whitespace
     is not stable across PG versions. The partial predicate is asserted
     via ``pg_get_expr(indpred, indrelid)`` substring on
@@ -165,19 +169,20 @@ async def test_dedup_unique_index_column_composition(pg_pool: asyncpg.Pool) -> N
             """
         )
         rendered = [row["rendered"] for row in rows]
-        assert len(rendered) == 4, (
-            f"audit_log_content_hash_uidx has {len(rendered)} columns, " f"expected 4: {rendered}"
+        assert len(rendered) == 5, (
+            f"audit_log_content_hash_uidx has {len(rendered)} columns, " f"expected 5: {rendered}"
         )
 
-        # First three are plain columns -- exact match.
+        # First four are plain columns -- exact match.
         assert rendered[0] == _EXPECTED_INDEX_COL_TUPLE[0]
         assert rendered[1] == _EXPECTED_INDEX_COL_TUPLE[1]
         assert rendered[2] == _EXPECTED_INDEX_COL_TUPLE[2]
+        assert rendered[3] == _EXPECTED_INDEX_COL_TUPLE[3]
 
-        # Fourth is the metadata->>'content_hash' expression; substring
+        # Fifth is the metadata->>'content_hash' expression; substring
         # match because PG renderer whitespace is not stable.
-        assert "metadata" in rendered[3]
-        assert "content_hash" in rendered[3]
+        assert "metadata" in rendered[4]
+        assert "content_hash" in rendered[4]
 
         # Partial predicate must still be ``metadata ? 'content_hash'``.
         predicate = await conn.fetchval(

@@ -9,7 +9,10 @@ helpers that own them:
   :func:`record_audit_async`.
 * ``AUDIT_INSERT_DEDUPED_SQL`` -- 7-column insert with ``ON CONFLICT
   DO NOTHING`` for re-delivery dedup, keyed on
-  ``(target_kind, target_id, action, metadata->>'content_hash')``.
+  ``(actor_id, target_kind, target_id, action, metadata->>'content_hash')``
+  (actor_id prepended in gubbi migration 0031 to close the cross-actor
+  false-collision tampering vector; webhook idempotency preserved
+  because each webhook source uses a constant actor_id).
   Use via :func:`record_audit_deduped_async`.
 * ``record_audit_async`` -- canonical writer. Performs actor/target id
   validation, banned-key metadata redaction, IP normalization,
@@ -134,20 +137,28 @@ AUDIT_INSERT_SQL: str = textwrap.dedent(
 
 
 # Atomic dedup for re-deliveries. The partial unique index
-# ``audit_log_content_hash_uidx`` (gubbi migration 0020) on
-# ``(target_kind, target_id, action, metadata->>'content_hash')
+# ``audit_log_content_hash_uidx`` (rebuilt by gubbi migration 0031) on
+# ``(actor_id, target_kind, target_id, action, metadata->>'content_hash')
 # WHERE metadata ? 'content_hash'`` enforces the constraint at the DB
 # layer; this INSERT returns no rows on conflict, signaling the caller
 # that the audit row was already written. ``target_kind`` was added in
 # migration 0020 as a namespace discriminator so heterogeneous
 # ``target_id`` values across kinds (e.g. entry id "42" vs. topic path
-# "42") cannot trip a false unique-violation.
+# "42") cannot trip a false unique-violation. ``actor_id`` was
+# prepended in migration 0031 to close a cross-actor false-collision
+# tampering vector: without it, two distinct actors writing the same
+# (target_kind, target_id, action, content_hash) tuple would collapse
+# to a single audit row and the second actor's audit trail would be
+# silently suppressed. Webhook idempotency is preserved because the
+# cloud-api webhook handlers use a constant actor_id per source
+# (e.g. ``system:stripe_webhook``, ``system:kratos_webhook``), so
+# re-deliveries from the same source still dedup as before.
 AUDIT_INSERT_DEDUPED_SQL: str = textwrap.dedent(
     """\
     INSERT INTO audit_log
         (actor_type, actor_id, action, target_kind, target_type, target_id, metadata)
     VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
-    ON CONFLICT (target_kind, target_id, action, (metadata->>'content_hash'))
+    ON CONFLICT (actor_id, target_kind, target_id, action, (metadata->>'content_hash'))
         WHERE metadata ? 'content_hash'
     DO NOTHING
     RETURNING 1"""
@@ -400,8 +411,9 @@ async def record_audit_async(
         Required when ``target_id`` is supplied. Namespace discriminator
         added in gubbi migration 0020 so the dedup partial unique index
         ``audit_log_content_hash_uidx`` (keyed on
-        ``(target_kind, target_id, action, metadata->>'content_hash')``)
-        cannot collide across kinds with overlapping ``target_id`` shapes
+        ``(actor_id, target_kind, target_id, action,
+        metadata->>'content_hash')`` after migration 0031) cannot collide
+        across kinds with overlapping ``target_id`` shapes
         (e.g. entry id "42" vs. topic path "42"). Passing ``target_id``
         without ``target_kind`` raises ``ValueError``.
     reason:

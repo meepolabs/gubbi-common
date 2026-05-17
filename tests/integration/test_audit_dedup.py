@@ -2,7 +2,7 @@
 
 Run with ``INTEGRATION=1 pytest -m integration``. Uses the testcontainers
 ``pg_pool`` fixture from ``tests/integration/conftest.py``. The vendored
-schema (``AUDIT_LOG_DDL``) mirrors gubbi migrations through 0022; the
+schema (``AUDIT_LOG_DDL``) mirrors gubbi migrations through 0031; the
 ``AUDIT_LOG_DDL_BASED_ON`` constant pins the high-water mark and is
 guarded by ``test_audit_ddl_based_on_matches_latest_migration`` in
 ``test_audit_schema_drift.py``. Update conftest and the based-on pin
@@ -89,9 +89,11 @@ async def test_dedup_insert_blocks_duplicate_content_hash(
         )
         assert first == 1
 
-        # Second call with same (target_kind, target_id, action,
+        # Second call with same (actor_id, target_kind, target_id, action,
         # content_hash) hits the partial unique index; ON CONFLICT DO
-        # NOTHING returns no row.
+        # NOTHING returns no row. Same actor_id is intentional -- the
+        # mig-0031 index leads with actor_id, so a different actor_id
+        # would no longer collide (see ``test_dedup_allows_cross_actor``).
         second = await conn.fetchval(
             AUDIT_INSERT_DEDUPED_SQL,
             "system",
@@ -174,10 +176,13 @@ async def test_dedup_distinguishes_target_kinds(pg_pool: asyncpg.Pool) -> None:
     content_hash)`` with different ``target_kind`` must both insert.
 
     This is the regression test for the motivation behind migration
-    0020: the dedup partial unique index includes ``target_kind`` as the
-    leading column so heterogeneous ``target_id`` shapes across kinds
-    (e.g. a user id and a subscription id that happen to share the same
-    literal string) cannot trip a false unique-violation.
+    0020: the dedup partial unique index includes ``target_kind`` as a
+    leading namespace column so heterogeneous ``target_id`` shapes
+    across kinds (e.g. a user id and a subscription id that happen to
+    share the same literal string) cannot trip a false unique-violation.
+    Migration 0031 prepended ``actor_id`` ahead of ``target_kind``, but
+    this test holds ``actor_id`` constant across both rows so the
+    target_kind discriminator is the only thing distinguishing them.
     """
     async with pg_pool.acquire() as conn:
         # Use distinct target_kind vs target_type values so a swapped-bind
@@ -197,8 +202,10 @@ async def test_dedup_distinguishes_target_kinds(pg_pool: asyncpg.Pool) -> None:
         assert first == 1
 
         # Same target_id + action + content_hash but a different
-        # target_kind -- the partial unique index keys on target_kind
-        # first, so this must succeed rather than collide.
+        # target_kind -- the partial unique index keys on target_kind,
+        # so this must succeed rather than collide. ``actor_id`` is held
+        # constant across both rows so target_kind is the sole
+        # discriminator under test.
         second = await conn.fetchval(
             AUDIT_INSERT_DEDUPED_SQL,
             "system",
@@ -229,12 +236,77 @@ async def test_dedup_distinguishes_target_kinds(pg_pool: asyncpg.Pool) -> None:
         assert types == ["stripe_subscription", "kratos_identity"]
 
 
+@pytest.mark.asyncio(loop_scope="session")
+@pytest.mark.usefixtures("_audit_log_clean")
+async def test_dedup_allows_cross_actor(pg_pool: asyncpg.Pool) -> None:
+    """Two different actors writing the same target tuple must BOTH succeed.
+
+    Regression test for the bug-#3 / migration-0031 contract: the
+    dedup partial unique index leads with ``actor_id`` so a malicious
+    or buggy second actor cannot suppress an audit row written by a
+    first actor by replaying the same
+    ``(target_kind, target_id, action, content_hash)`` tuple.
+
+    Pre-mig-0031 (actor_id NOT in the index), the second INSERT here
+    would have collided with the first and ON CONFLICT DO NOTHING would
+    have returned ``None``, silently swallowing the second actor's
+    audit trail. Post-mig-0031, both rows persist because the leading
+    ``actor_id`` column distinguishes them.
+    """
+    async with pg_pool.acquire() as conn:
+        first = await conn.fetchval(
+            AUDIT_INSERT_DEDUPED_SQL,
+            "system",
+            "system:worker_one",  # $2 actor_id
+            "identity.updated",
+            "user",
+            "user",
+            "00000000-0000-0000-0000-000000000005",
+            json.dumps({"content_hash": "shared"}),
+        )
+        assert first == 1
+
+        # Same (target_kind, target_id, action, content_hash) tuple but
+        # a different actor_id -- post-mig-0031 the leading actor_id
+        # column means this is a separate dedup namespace and the row
+        # MUST insert.
+        second = await conn.fetchval(
+            AUDIT_INSERT_DEDUPED_SQL,
+            "system",
+            "system:worker_two",  # $2 actor_id (different)
+            "identity.updated",
+            "user",
+            "user",
+            "00000000-0000-0000-0000-000000000005",
+            json.dumps({"content_hash": "shared"}),
+        )
+        assert second == 1
+
+        count = await conn.fetchval(
+            "SELECT count(*) FROM audit_log "
+            "WHERE target_id = '00000000-0000-0000-0000-000000000005'"
+        )
+        assert count == 2
+
+        # Confirm both rows carry their distinct actor_id values --
+        # catches a regression that drops ``actor_id`` from the dedup
+        # index but leaves the test passing because the duplicate row
+        # was silently suppressed.
+        rows = await conn.fetch(
+            "SELECT actor_id FROM audit_log "
+            "WHERE target_id = '00000000-0000-0000-0000-000000000005' "
+            "ORDER BY actor_id"
+        )
+        actor_ids = [row["actor_id"] for row in rows]
+        assert actor_ids == ["system:worker_one", "system:worker_two"]
+
+
 # Sibling-repo path; ``conftest.MIGRATION_DDL_PATH`` does the resolution.
-# Pins to migration 0020 (target_kind rebuild) -- the migration that
+# Pins to migration 0031 (actor_id prepend) -- the migration that
 # defines the index shape ``AUDIT_INSERT_DEDUPED_SQL`` now depends on.
-# The old 0016 glob was a no-op guard: it asserted the OLD 3-column
-# index name lived in mig 0016 (true, but unrelated to today's shape).
-_GUBBI_MIGRATION_GLOB = "*0020*audit_log_target_kind*.py"
+# The previous 0020 glob was retained until 0031 landed; cross-checking
+# the latest migration is the contract this guard enforces.
+_GUBBI_MIGRATION_GLOB = "*0031*audit_log_dedup_actor_scope*.py"
 
 
 def _gubbi_migration_path() -> Path | None:
@@ -248,29 +320,32 @@ def _gubbi_migration_path() -> Path | None:
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_dedup_ddl_matches_gubbi_migration(pg_pool: asyncpg.Pool) -> None:
-    """Cross-check the live partial-index DDL against gubbi migration 0020.
+    """Cross-check the live partial-index DDL against gubbi migration 0031.
 
     Skips if gubbi is not checked out alongside gubbi-common (e.g. CI
     that runs only this repo). When gubbi is present, the migration
-    string must carry the partial index name, the new leading column
-    ``target_kind``, and the ``content_hash`` predicate that the dedup
-    INSERT relies on. This is the real cross-check; the previous shape
-    (against mig 0016) was a no-op.
+    string must carry the partial index name, the leading column
+    ``actor_id`` (from mig 0031), the namespace discriminator
+    ``target_kind`` (from mig 0020), and the ``content_hash`` predicate
+    that the dedup INSERT relies on.
     """
     path = _gubbi_migration_path()
     if path is None:
-        pytest.skip("gubbi migration 0020 not present alongside gubbi-common")
+        pytest.skip("gubbi migration 0031 not present alongside gubbi-common")
 
     text = path.read_text(encoding="utf-8")
-    # Three contract surfaces: index name, leading column, partial predicate.
-    # All three must be present in the migration that builds the index
-    # AUDIT_INSERT_DEDUPED_SQL targets.
+    # Four contract surfaces: index name, leading actor_id (mig 0031),
+    # target_kind namespace discriminator, partial predicate.
     assert "audit_log_content_hash_uidx" in text, (
-        "gubbi migration 0020 no longer carries the dedup index name; "
+        "gubbi migration 0031 no longer carries the dedup index name; "
         "AUDIT_INSERT_DEDUPED_SQL is broken"
     )
+    assert "actor_id" in text, (
+        "gubbi migration 0031 dropped actor_id from the dedup index; "
+        "AUDIT_INSERT_DEDUPED_SQL ON CONFLICT no longer matches"
+    )
     assert "target_kind" in text, (
-        "gubbi migration 0020 dropped target_kind from the dedup index; "
+        "gubbi migration 0031 dropped target_kind from the dedup index; "
         "AUDIT_INSERT_DEDUPED_SQL ON CONFLICT no longer matches"
     )
     assert "content_hash" in text
