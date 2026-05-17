@@ -12,7 +12,7 @@ builders, allowlists. Everything else lives in the consuming package.
 Distributed as a git dependency. In a consumer's `pyproject.toml`:
 
 ```toml
-gubbi-common = { git = "ssh://git@github.com/meepolabs/gubbi-common.git", tag = "v0.4.4" }
+gubbi-common = { git = "ssh://git@github.com/meepolabs/gubbi-common.git", tag = "v0.13.0" }
 ```
 
 Pin a tag, not a branch.
@@ -32,19 +32,7 @@ release-tagging policy.
 
 ## Modules
 
-### `gubbi_common.telemetry`
-
-OTel span attribute filtering (`safe_set_attributes`, allowlist contracts).
-
-### `gubbi_common.db` (optional extra: `[db]`)
-
-User-scoped asyncpg connection helper (`user_scoped_connection`,
-`MissingUserIdError`). Requires asyncpg. Install with:
-
-```toml
-# pyproject.toml (poetry)
-gubbi-common = { git = "...", tag = "v0.3.0", extras = ["db"] }
-```
+See [CODEMAP.md](./CODEMAP.md) for the per-module surface.
 
 ## Develop
 

@@ -68,3 +68,18 @@ Pre-1.0 we treat MINOR (`0.x.0`) as the normal cadence for batched
 features and PATCH (`0.x.y`) for individual fixes. Breaking changes
 during 0.x bump MINOR (e.g. v0.5.0 will introduce `Action(StrEnum)` --
 breaking-ish runtime type change requiring consumer audit).
+
+### Cross-repo CI
+
+When a PR targets `main`, the workflow
+[`.github/workflows/cross-repo-validate.yml`](./.github/workflows/cross-repo-validate.yml)
+checks branch changes against each downstream consumer (`gubbi` /
+`gubbi-cloud`). It overrides the `gubbi-common` dependency in each
+downstream's `pyproject.toml` to use `path = "../gubbi-common"` with
+`develop = true`, runs their test suites, and blocks merge if a
+downstream breakage is detected.
+
+The `gubbi-cloud` matrix entry requires the `GUBBI_CLOUD_PAT` secret
+(a GitHub personal access token with `repo` scope) to be set in this
+repo's Settings > Secrets. Without it the step skips with a warning on
+fork PRs; the gubbi and core `test` jobs still run unconditionally.
