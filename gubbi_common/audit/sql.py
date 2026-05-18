@@ -456,9 +456,12 @@ async def record_audit_async(
         attrs: dict[str, Any] = {
             "event_type": action,
             "actor_type": actor_type,
+            "actor_id": actor_id,
         }
         if target_id is not None:
             attrs["target_id"] = target_id
+        if target_kind is not None:
+            attrs["target_kind"] = str(target_kind)
         for key, value in attrs.items():
             span.set_attribute(key, value)
 
@@ -579,9 +582,12 @@ async def record_audit_deduped_async(
         attrs: dict[str, Any] = {
             "event_type": action,
             "actor_type": actor_type,
+            "actor_id": actor_id,
         }
         if target_id is not None:
             attrs["target_id"] = target_id
+        if target_kind is not None:
+            attrs["target_kind"] = str(target_kind)
         for key, value in attrs.items():
             span.set_attribute(key, value)
 
