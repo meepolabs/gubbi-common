@@ -353,3 +353,139 @@ async def test_contextvar_reset_in_finally_block() -> None:
     )
 
     assert get_correlation_id() is None
+
+
+# ---------------------------------------------------------------------------
+# Root-span tagging (closes the FastAPI auto-instrumentor gap)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_tags_current_span_with_correlation_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Middleware tags the active OTel span with correlation_id.
+
+    The FastAPI auto-instrumentor's root server span starts BEFORE this
+    user-middleware runs, so CorrelationSpanProcessor.on_start cannot
+    tag it (the ContextVar isn't populated yet). The middleware closes
+    this gap by calling set_attribute on the current span directly.
+    """
+    captured: list[tuple[str, str]] = []
+
+    class _FakeSpan:
+        def set_attribute(self, key: str, value: str) -> None:
+            captured.append((key, value))
+
+    fake_span = _FakeSpan()
+    monkeypatch.setattr(
+        "gubbi_common.middleware.correlation.trace.get_current_span",
+        lambda: fake_span,
+    )
+
+    middleware = CorrelationIDMiddleware(_EchoApp())
+
+    await middleware(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/",
+            "headers": [(b"x-correlation-id", b"root-span-cid")],
+        },
+        lambda: {},
+        Sender(),
+    )
+
+    assert ("correlation_id", "root-span-cid") in captured
+
+
+@pytest.mark.asyncio
+async def test_tags_current_span_with_uuid4_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When no header is present, the generated UUID4 lands on the span."""
+    captured: list[tuple[str, str]] = []
+
+    class _FakeSpan:
+        def set_attribute(self, key: str, value: str) -> None:
+            captured.append((key, value))
+
+    fake_span = _FakeSpan()
+    monkeypatch.setattr(
+        "gubbi_common.middleware.correlation.trace.get_current_span",
+        lambda: fake_span,
+    )
+
+    middleware = CorrelationIDMiddleware(_EchoApp())
+
+    await middleware(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/",
+            "headers": [],
+        },
+        lambda: {},
+        Sender(),
+    )
+
+    assert len(captured) == 1
+    key, value = captured[0]
+    assert key == "correlation_id"
+    # The fallback is a UUID4 string -- non-empty and not a forwarded header.
+    assert value
+    assert value != "root-span-cid"
+
+
+@pytest.mark.asyncio
+async def test_span_tagging_failure_does_not_break_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """If set_attribute raises (future OTel surprise), request still completes."""
+
+    class _BrokenSpan:
+        def set_attribute(self, key: str, value: str) -> None:
+            raise RuntimeError("simulated OTel failure")
+
+    monkeypatch.setattr(
+        "gubbi_common.middleware.correlation.trace.get_current_span",
+        lambda: _BrokenSpan(),
+    )
+
+    app = _CaptureApp()
+    middleware = CorrelationIDMiddleware(app)
+
+    # Should NOT raise -- the defensive try/except swallows the error.
+    await middleware(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/",
+            "headers": [(b"x-correlation-id", b"resilient-cid")],
+        },
+        lambda: {},
+        Sender(),
+    )
+
+    # Downstream app still ran and saw the cid.
+    assert app.captured_cid == "resilient-cid"
+
+
+@pytest.mark.asyncio
+async def test_span_tagging_with_real_invalid_span() -> None:
+    """With no provider configured, trace.get_current_span() is a no-op.
+
+    set_attribute on the INVALID_SPAN is a safe no-op; the middleware
+    must complete normally without any monkeypatching of OTel.
+    """
+    middleware = CorrelationIDMiddleware(_EchoApp())
+
+    # Should NOT raise and should complete the response.
+    sender = await _run_middleware(
+        middleware,
+        scope_headers=[(b"x-correlation-id", b"no-provider-cid")],
+    )
+
+    # Confirm the response was produced (echo by default).
+    raw_value = sender.get_header("x-correlation-id")
+    assert raw_value == b"no-provider-cid"

@@ -27,10 +27,13 @@ purely as aliases.
 
 from __future__ import annotations
 
+import contextlib
 from collections.abc import Callable, MutableMapping
 from contextvars import Token
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
+
+from opentelemetry import trace
 
 from gubbi_common.telemetry.logging import (
     reset_correlation_id,
@@ -42,6 +45,7 @@ if TYPE_CHECKING:
 
 HEADER_NAME_BYTES = b"x-correlation-id"
 HEADER_NAME_STR = "X-Correlation-ID"
+_CORRELATION_ATTR: str = "correlation_id"
 
 
 def _default_validator(value: str) -> bool:
@@ -108,6 +112,20 @@ class CorrelationIDMiddleware:
 
         # ---- set ContextVar via gubbi-common API
         token: Token[str | None] = set_correlation_id(cid)
+
+        # ---- tag the active OTel span (the root server span started by
+        # the FastAPI auto-instrumentor BEFORE this user-middleware
+        # runs). CorrelationSpanProcessor.on_start only fires for spans
+        # opened AFTER the ContextVar is populated, so without this the
+        # root server span is never tagged. Child spans started
+        # downstream are still covered by the processor.
+        #
+        # get_current_span() returns INVALID_SPAN (a no-op) when no
+        # provider is configured; set_attribute on the no-op is safe.
+        # contextlib.suppress is defense against future surprises -- never
+        # fail the request on an OTel hiccup.
+        with contextlib.suppress(Exception):
+            trace.get_current_span().set_attribute(_CORRELATION_ATTR, cid)
 
         try:
             # ---- per-repo span attribute injection (OTel-agnostic)
