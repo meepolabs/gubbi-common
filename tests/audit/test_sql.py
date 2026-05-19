@@ -990,3 +990,100 @@ async def test_record_audit_deduped_async_rejects_empty_target_kind_string() -> 
             metadata={"content_hash": "abc"},
         )
     assert conn.calls == []
+
+
+# ---------------------------------------------------------------------------
+# correlation_id kwarg + ContextVar default
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_record_audit_async_threads_correlation_id_kwarg_into_metadata() -> None:
+    """Explicit correlation_id kwarg lands in the JSON-encoded metadata."""
+    conn = _StubConn()
+
+    await record_audit_async(
+        conn,  # type: ignore[arg-type]
+        actor_type="system",
+        actor_id="system:worker",
+        action="entry.created",
+        metadata={"foo": "bar"},
+        correlation_id="req-explicit-7a3e",
+    )
+
+    import json as _json
+
+    payload = _json.loads(conn.calls[0][8])  # metadata is $8 (index 7 in args, 8 in call tuple)
+    assert payload == {"foo": "bar", "correlation_id": "req-explicit-7a3e"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_record_audit_async_picks_up_correlation_id_from_contextvar() -> None:
+    """Caller omits the kwarg -> default sourced from get_correlation_id()."""
+    from gubbi_common.correlation import reset_correlation_id, set_correlation_id
+
+    conn = _StubConn()
+    token = set_correlation_id("req-ctxvar-c91d")
+    try:
+        await record_audit_async(
+            conn,  # type: ignore[arg-type]
+            actor_type="system",
+            actor_id="system:worker",
+            action="entry.created",
+            metadata={"foo": "bar"},
+        )
+    finally:
+        reset_correlation_id(token)
+
+    import json as _json
+
+    payload = _json.loads(conn.calls[0][8])
+    assert payload == {"foo": "bar", "correlation_id": "req-ctxvar-c91d"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_record_audit_async_caller_metadata_correlation_id_wins() -> None:
+    """Explicit caller-supplied metadata['correlation_id'] is NOT overwritten.
+
+    Defense against silently replacing a deliberately-chosen value (e.g. a
+    test fixture pinning a specific cid for assertion).
+    """
+    conn = _StubConn()
+
+    await record_audit_async(
+        conn,  # type: ignore[arg-type]
+        actor_type="system",
+        actor_id="system:worker",
+        action="entry.created",
+        metadata={"correlation_id": "caller-wins"},
+        correlation_id="kwarg-should-not-win",
+    )
+
+    import json as _json
+
+    payload = _json.loads(conn.calls[0][8])
+    assert payload == {"correlation_id": "caller-wins"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_record_audit_async_no_correlation_id_when_context_unset() -> None:
+    """No kwarg + ContextVar unset -> metadata has NO correlation_id key."""
+    conn = _StubConn()
+
+    await record_audit_async(
+        conn,  # type: ignore[arg-type]
+        actor_type="system",
+        actor_id="system:worker",
+        action="entry.created",
+        metadata={"foo": "bar"},
+    )
+
+    import json as _json
+
+    payload = _json.loads(conn.calls[0][8])
+    assert payload == {"foo": "bar"}
+    assert "correlation_id" not in payload

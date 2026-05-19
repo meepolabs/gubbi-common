@@ -49,6 +49,7 @@ from opentelemetry import trace
 from opentelemetry.trace import Status, StatusCode
 
 from gubbi_common.audit.targets import TargetKind
+from gubbi_common.correlation import get_correlation_id
 from gubbi_common.telemetry.allowlist import is_banned_key
 
 if TYPE_CHECKING:
@@ -285,14 +286,27 @@ def _normalize_ip(ip_address: str | None) -> str | None:
     return str(ip_obj)
 
 
-def _prepare_metadata(metadata: dict[str, Any] | None) -> str:
+def _prepare_metadata(
+    metadata: dict[str, Any] | None,
+    *,
+    correlation_id: str | None = None,
+) -> str:
     """Redact, JSON-encode, and size-check an audit metadata dict.
 
     Raises ``ValueError`` if the post-redaction JSON encoding exceeds
     :data:`MAX_METADATA_BYTES` (4096 bytes). Defaults a ``None`` input
     to an empty dict so callers do not need a sentinel.
+
+    When ``correlation_id`` is supplied and the caller's metadata does
+    NOT already carry that key, it is injected before redaction so the
+    persisted audit row carries the request correlation_id for
+    DB-side forensic joins (``WHERE metadata->>'correlation_id' = ...``).
+    Caller-supplied ``correlation_id`` values in the metadata dict win
+    over the kwarg -- explicit beats implicit.
     """
-    resolved: dict[str, Any] = metadata if metadata is not None else {}
+    resolved: dict[str, Any] = dict(metadata) if metadata is not None else {}
+    if correlation_id is not None and "correlation_id" not in resolved:
+        resolved["correlation_id"] = correlation_id
     redacted = _redact_metadata(resolved)
     payload = json.dumps(redacted)
     if len(payload.encode("utf-8")) > MAX_METADATA_BYTES:
@@ -381,6 +395,7 @@ async def record_audit_async(
     metadata: dict[str, Any] | None = None,
     ip_address: str | None = None,
     user_agent: str | None = None,
+    correlation_id: str | None = None,
 ) -> None:
     """Insert one immutable row into ``audit_log``.
 
@@ -447,7 +462,12 @@ async def record_audit_async(
     )
 
     normalized_ip = _normalize_ip(ip_address)
-    metadata_json = _prepare_metadata(metadata)
+    # Default correlation_id from the request-scoped ContextVar so HTTP
+    # call sites don't have to thread it manually; background tasks /
+    # script entry points that have no inbound X-Correlation-ID get
+    # None and the metadata simply lacks the key.
+    effective_cid = correlation_id if correlation_id is not None else get_correlation_id()
+    metadata_json = _prepare_metadata(metadata, correlation_id=effective_cid)
 
     tracer = trace.get_tracer(_TRACER_NAME)
     start_ns = time.monotonic_ns()
@@ -509,6 +529,7 @@ async def record_audit_deduped_async(
     target_type: str | None = None,
     target_id: str | None = None,
     metadata: dict[str, Any] | None = None,
+    correlation_id: str | None = None,
 ) -> bool:
     """Insert one immutable row using the dedup INSERT shape.
 
@@ -572,7 +593,9 @@ async def record_audit_deduped_async(
         target_kind=target_kind,
     )
 
-    metadata_json = _prepare_metadata(metadata)
+    # See ``record_audit_async`` for ContextVar-default rationale.
+    effective_cid = correlation_id if correlation_id is not None else get_correlation_id()
+    metadata_json = _prepare_metadata(metadata, correlation_id=effective_cid)
 
     tracer = trace.get_tracer(_TRACER_NAME)
     start_ns = time.monotonic_ns()

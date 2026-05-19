@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 import os
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 
 from opentelemetry import trace as _otel_trace
 from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
@@ -18,7 +18,7 @@ from opentelemetry.metrics import set_meter_provider as _set_mp
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
 from opentelemetry.sdk.resources import Resource
-from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace import SpanProcessor, TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
 __all__ = [
@@ -40,6 +40,7 @@ def configure_otel(
     enabled: bool = True,
     service_version: str | None = None,
     deployment_environment: str | None = None,
+    extra_processors: Sequence[SpanProcessor] = (),
 ) -> None:
     """Configure the OTel SDK without cloud-specific auto-instrumentors.
 
@@ -65,6 +66,16 @@ def configure_otel(
     default. Without the in-process defaults, HyperDX traces carry no
     ``service.version`` or ``deployment.environment`` tag because neither
     Dockerfile nor Kamal config sets ``OTEL_RESOURCE_ATTRIBUTES`` today.
+
+    ``extra_processors`` -- additional :class:`SpanProcessor` instances
+    registered alongside the default ``BatchSpanProcessor``. Threaded
+    through the constructor (vs. a post-hoc ``add_span_processor``) so
+    the provider's wiring is atomic and ordered: no startup gap where
+    spans emit untagged because a hook had not been registered yet.
+    Pass e.g. :class:`gubbi_common.telemetry.correlation_processor.CorrelationSpanProcessor`
+    to auto-inject ``correlation_id`` on every span. Registered BEFORE
+    the exporter so the attribute lands before export, regardless of
+    whether the exporter processor runs at ``on_start`` or ``on_end``.
     """
     resource_attributes: dict[str, str] = {
         "service.name": service_name,
@@ -93,11 +104,20 @@ def configure_otel(
     global _TRACER
     _TRACER = tracer
 
+    # Register extra processors BEFORE the exporter so on_start hooks
+    # (e.g. CorrelationSpanProcessor injecting correlation_id) land
+    # before BatchSpanProcessor's on_end queues the span for export.
+    for processor in extra_processors:
+        provider.add_span_processor(processor)
+
     if enabled:
         span_exporter = OTLPSpanExporter(endpoint=endpoint, insecure=True)
         provider.add_span_processor(BatchSpanProcessor(span_exporter))
-    # When disabled: install no span processor. The provider becomes a sink
+    # When disabled: install no exporter. The provider becomes a sink
     # with no exporter, so spans are created and dropped with zero IO.
+    # ``extra_processors`` (above) still run even when ``enabled=False``
+    # -- they may have non-export side effects (e.g. ContextVar reads)
+    # that callers depend on regardless of export configuration.
 
     _otel_trace.set_tracer_provider(provider)
 
