@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import inspect
+import json
 from typing import Any
 
 import pytest
@@ -336,9 +337,7 @@ async def test_metadata_under_cap_persisted_as_is() -> None:
     )
     _, *args = conn.calls[0]
     payload = args[7]
-    import json as _json
-
-    assert _json.loads(payload) == {"k": "v", "count": 7}
+    assert json.loads(payload) == {"k": "v", "count": 7}
 
 
 @pytest.mark.asyncio
@@ -370,9 +369,7 @@ async def test_metadata_banned_key_redacted() -> None:
         metadata={"password": "hunter2", "ok": "value"},
     )
     _, *args = conn.calls[0]
-    import json as _json
-
-    persisted = _json.loads(args[7])
+    persisted = json.loads(args[7])
     assert persisted["password"] == "[REDACTED]"
     assert persisted["ok"] == "value"
 
@@ -395,9 +392,7 @@ async def test_metadata_banned_key_recursive_redaction() -> None:
         metadata=nested,
     )
     _, *args = conn.calls[0]
-    import json as _json
-
-    persisted = _json.loads(args[7])
+    persisted = json.loads(args[7])
     assert persisted["outer"]["password"] == "[REDACTED]"
     assert persisted["outer"]["list"][0]["email"] == "[REDACTED]"
     assert persisted["outer"]["list"][1]["safe"] == 1
@@ -421,9 +416,7 @@ async def test_metadata_derivative_suffix_not_redacted() -> None:
         metadata={"password_hash": "abc", "email_hash": "def"},
     )
     _, *args = conn.calls[0]
-    import json as _json
-
-    persisted = _json.loads(args[7])
+    persisted = json.loads(args[7])
     assert persisted["password_hash"] == "[REDACTED]"
     assert persisted["email_hash"] == "def"
 
@@ -536,9 +529,7 @@ async def test_record_audit_async_tuple_metadata_redacted() -> None:
         metadata={"items": ({"email": "a@b"}, {"ok": "v"})},
     )
     _, *args = conn.calls[0]
-    import json as _json
-
-    persisted = _json.loads(args[7])
+    persisted = json.loads(args[7])
     assert persisted["items"][0]["email"] == "[REDACTED]"
     assert persisted["items"][1]["ok"] == "v"
 
@@ -810,9 +801,7 @@ async def test_record_audit_deduped_async_writes_deduped_sql() -> None:
     assert args[3] == TargetKind.SUBSCRIPTION
     assert args[4] == "subscription"
     assert args[5] == "sub_abc"
-    import json as _json
-
-    assert _json.loads(args[6]) == {"content_hash": "abc123"}
+    assert json.loads(args[6]) == {"content_hash": "abc123"}
 
 
 @pytest.mark.asyncio
@@ -864,9 +853,7 @@ async def test_record_audit_deduped_async_redacts_banned_metadata() -> None:
         metadata={"content_hash": "abc", "password": "leak"},
     )
     _, *args = conn.calls[0]
-    import json as _json
-
-    persisted = _json.loads(args[6])
+    persisted = json.loads(args[6])
     assert persisted["password"] == "[REDACTED]"
     assert persisted["content_hash"] == "abc"
 
@@ -1012,9 +999,7 @@ async def test_record_audit_async_threads_correlation_id_kwarg_into_metadata() -
         correlation_id="req-explicit-7a3e",
     )
 
-    import json as _json
-
-    payload = _json.loads(conn.calls[0][8])  # metadata is $8 (index 7 in args, 8 in call tuple)
+    payload = json.loads(conn.calls[0][8])  # metadata is $8 (index 7 in args, 8 in call tuple)
     assert payload == {"foo": "bar", "correlation_id": "req-explicit-7a3e"}
 
 
@@ -1037,9 +1022,7 @@ async def test_record_audit_async_picks_up_correlation_id_from_contextvar() -> N
     finally:
         reset_correlation_id(token)
 
-    import json as _json
-
-    payload = _json.loads(conn.calls[0][8])
+    payload = json.loads(conn.calls[0][8])
     assert payload == {"foo": "bar", "correlation_id": "req-ctxvar-c91d"}
 
 
@@ -1062,9 +1045,7 @@ async def test_record_audit_async_caller_metadata_correlation_id_wins() -> None:
         correlation_id="kwarg-should-not-win",
     )
 
-    import json as _json
-
-    payload = _json.loads(conn.calls[0][8])
+    payload = json.loads(conn.calls[0][8])
     assert payload == {"correlation_id": "caller-wins"}
 
 
@@ -1082,8 +1063,37 @@ async def test_record_audit_async_no_correlation_id_when_context_unset() -> None
         metadata={"foo": "bar"},
     )
 
-    import json as _json
-
-    payload = _json.loads(conn.calls[0][8])
+    payload = json.loads(conn.calls[0][8])
     assert payload == {"foo": "bar"}
     assert "correlation_id" not in payload
+
+
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_record_audit_deduped_async_threads_correlation_id_into_metadata() -> None:
+    """Dedup writer mirrors the canonical writer's correlation_id semantics.
+
+    Logic is shared via ``_prepare_metadata``; this pins the contract on
+    the dedup path so a future refactor that bypasses the helper for
+    dedup writes is caught.
+    """
+    conn = _StubFetchvalConn(fetchval_returns=1)
+
+    await record_audit_deduped_async(
+        conn,  # type: ignore[arg-type]
+        actor_type="system",
+        actor_id="system:stripe_webhook",
+        action="subscription.created",
+        target_kind=TargetKind.SUBSCRIPTION,
+        target_id="sub_abc",
+        metadata={"content_hash": "abc123"},
+        correlation_id="req-dedup-cid-99",
+    )
+
+    # Dedup writer parameter layout puts metadata at args index 6
+    # (sql=[0], actor_type=[1], actor_id=[2], action=[3],
+    #  target_kind=[4], target_type=[5], target_id=[6], metadata=[7]).
+    # _StubFetchvalConn captures (sql, *args) flat in calls[0], so
+    # metadata is conn.calls[0][7].
+    payload = json.loads(conn.calls[0][7])
+    assert payload == {"content_hash": "abc123", "correlation_id": "req-dedup-cid-99"}

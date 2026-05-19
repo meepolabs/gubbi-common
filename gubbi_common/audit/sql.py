@@ -445,6 +445,17 @@ async def record_audit_async(
         cast to ``inet`` server-side.
     user_agent:
         Optional HTTP User-Agent string.
+    correlation_id:
+        Optional request correlation_id, injected into ``metadata``
+        under the key ``"correlation_id"`` before redaction + encoding.
+        Defaults to :func:`gubbi_common.correlation.get_correlation_id`
+        (the request-scoped ContextVar) when omitted. Caller-supplied
+        ``metadata["correlation_id"]`` wins over both the kwarg and the
+        ContextVar default. Passing ``None`` explicitly is treated
+        identically to omitting the kwarg -- the ContextVar still
+        fills in when set. Background tasks / scripts with no request
+        scope produce audit rows without the key (no synthetic
+        sentinel, since one would pollute forensic queries).
 
     Raises
     ------
@@ -577,6 +588,11 @@ async def record_audit_deduped_async(
         ``"content_hash"`` key for the dedup partial unique index to
         fire. Banned keys are redacted; the post-redaction payload must
         be <= ``MAX_METADATA_BYTES``.
+    correlation_id:
+        Optional request correlation_id, injected into ``metadata``
+        under the key ``"correlation_id"`` before redaction. See
+        :func:`record_audit_async` for full semantics (ContextVar
+        default, caller-wins precedence, no-sentinel-for-background).
     """
     # Routes through the same validator as the canonical writer so a
     # future tightening of actor_type / actor_id rules cannot drift

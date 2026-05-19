@@ -2,13 +2,17 @@
 
 The processor reads ``correlation_id`` from the ContextVar populated by
 ``CorrelationIDMiddleware`` and attaches it to every span at ``on_start``.
-Tests cover:
+Tests cover (direct ``MagicMock`` invocation -- no live OTel SDK setup):
   - cid present in ContextVar -> attribute lands on the span;
   - cid absent (background task / lifespan boot) -> attribute is NOT set,
     span stays untagged (vs. carrying a misleading sentinel);
-  - the processor is registered ahead of the exporter so the attribute
-    is present by the time the BatchSpanProcessor's on_end queues the
-    span for export.
+  - ``on_end`` / ``shutdown`` / ``force_flush`` no-op contracts.
+
+End-to-end "processor registered ahead of exporter / attribute present
+at export time" is NOT covered here -- that's a provider-integration
+concern and would require a real ``TracerProvider`` + in-memory
+exporter setup. Locked instead via the ordered ``add_span_processor``
+call in :func:`gubbi_common.telemetry.otel.configure_otel`.
 """
 
 from __future__ import annotations

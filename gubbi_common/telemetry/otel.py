@@ -44,10 +44,14 @@ def configure_otel(
 ) -> None:
     """Configure the OTel SDK without cloud-specific auto-instrumentors.
 
-    * ``disabled`` -- when ``enabled=False``, installs SDK providers with
-      no span processors and no metric readers (sink / no-export
-      configuration). Instrumentation is wired but **zero** data leaves
-      the process.
+    * ``disabled`` -- when ``enabled=False``, installs SDK providers
+      with no exporter span processor and no metric readers (sink /
+      no-export configuration). The default ``BatchSpanProcessor`` is
+      not installed so spans are created and dropped with zero IO.
+      ``extra_processors`` (see below) are STILL installed in this
+      mode -- they may carry non-export side effects (e.g. a
+      ``CorrelationSpanProcessor`` injecting ContextVar values) that
+      callers depend on regardless of export configuration.
     * Otherwise configures an ``OTLPSpanExporter`` +
       ``OTLPMetricExporter`` pointed at *endpoint* (the local otel-collector
       gRPC port).
