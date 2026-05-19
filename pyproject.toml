@@ -39,15 +39,25 @@ requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.ruff]
-target-version = "py311"
+target-version = "py312"
 line-length = 100
 
 [tool.ruff.lint]
-select = ["E", "F", "B", "I", "N", "UP", "ANN", "S", "A", "C4", "T20", "PT", "RET", "SIM"]
+select = [
+    "E", "F", "B", "I", "N", "UP", "ANN", "S", "A", "C4", "T20", "PT", "RET", "SIM",
+    # Docstring presence + format. D101/D102/D103 enforce public-class /
+    # method / function docstrings; D200/D205/D400 enforce summary-line
+    # format. Adopted from meepo-conventions baseline; tests/ are exempt
+    # via per-file-ignores below.
+    "D101", "D102", "D103", "D200", "D205", "D400",
+]
 ignore = ["ANN401", "N818"]
 
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
 [tool.ruff.lint.per-file-ignores]
-"tests/**/*.py" = ["S101", "PT011", "S105", "S106", "S107", "ANN", "E501", "S603", "S607"]
+"tests/**/*.py" = ["S101", "PT011", "S105", "S106", "S107", "ANN", "D", "E501", "S603", "S607"]
 # tools/ are CLI scripts -- argparse-driven, no untrusted input.
 "tools/**/*.py" = ["S603"]
 
@@ -58,9 +68,10 @@ known-first-party = ["gubbi_common"]
 # Flag set converged to the union across gubbi / gubbi-cloud / gubbi-common
 # (B4 Q1=A). Each strict flag here is also set in at least one sibling repo;
 # adding the missing ones removes "works on my repo" surprises when shared
-# contracts move between repos. `python_version` stays at 3.11 because all
-# three repos pin `python = "^3.11"` at the package level.
-python_version = "3.11"
+# contracts move between repos. `python_version` is 3.12 to match the
+# canonical dev/CI version (and sibling repos); the package floor stays at
+# `python = "^3.11"` for self-host compatibility.
+python_version = "3.12"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
@@ -84,3 +95,9 @@ markers = [
     "unit: fast, isolated unit tests with no external dependencies",
     "integration: integration tests requiring docker / testcontainers",
 ]
+
+[tool.coverage.report]
+# Floor; ratchet quarterly. Adopted from meepo-conventions baseline;
+# starting at 60 (canonical conservative default for a new gate). Bump
+# after a coverage-improvement PR observes the steady-state level.
+fail_under = 60

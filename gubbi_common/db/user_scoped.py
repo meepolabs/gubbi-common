@@ -109,8 +109,7 @@ async def _set_ef_search(conn: asyncpg.Connection, ef_search: int, *, local: boo
 
 
 async def __safe_reset(conn: asyncpg.Connection, guc: str) -> None:
-    """RESET *guc*; log and swallow any error so cleanup never masks the
-    caller's exception.
+    """RESET *guc*; log and swallow errors so cleanup never masks the caller's exception.
 
     *guc* MUST be a member of :data:`_GUC_ALLOWLIST`. Passing any other
     name is a programming error and raises ``ValueError`` so the bug is

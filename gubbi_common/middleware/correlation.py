@@ -94,6 +94,7 @@ class CorrelationIDMiddleware:
         self.span_attribute_setter = span_attribute_setter
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        """Read or mint the correlation id, bind it to the ContextVar, and tag the root span."""
         # ---- read header from ASGI scope (byte-iteration, cloud pattern)
         # ASGI spec requires lowercased header names in scope, but compare
         # case-insensitively as defense in depth in case a server forwards

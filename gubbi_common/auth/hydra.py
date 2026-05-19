@@ -27,18 +27,20 @@ __all__ = [
 
 @dataclass(frozen=True)
 class TokenClaims:
+    """Hydra introspection claims used by downstream auth strategies."""
+
     sub: UUID
     scope: str  # raw space-delimited scope string from Hydra
     exp: int  # unix timestamp
 
 
 class HydraError(Exception):
-    pass
+    """Base for Hydra introspection errors."""
 
 
 class HydraUnreachable(HydraError):
-    pass
+    """Hydra admin endpoint did not respond (network or 5xx)."""
 
 
 class HydraInvalidToken(HydraError):
-    pass
+    """Token rejected by Hydra introspection (inactive, expired, malformed)."""
