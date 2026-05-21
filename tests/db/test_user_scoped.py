@@ -10,7 +10,11 @@ from uuid import uuid4
 
 import pytest
 
-from gubbi_common.db.user_scoped import MissingUserIdError, user_scoped_connection
+from gubbi_common.db.user_scoped import (
+    DEFAULT_POOL_ACQUIRE_TIMEOUT_SECS,
+    MissingUserIdError,
+    user_scoped_connection,
+)
 
 
 def make_pool() -> tuple[Any, Any]:
@@ -289,3 +293,137 @@ class TestSafeResetAllowlist:
         from gubbi_common.db.user_scoped import _GUC_ALLOWLIST
 
         assert frozenset({"app.current_user_id", "hnsw.ef_search"}) == _GUC_ALLOWLIST
+
+
+# ===========================================================================
+# pool.acquire timeout: forwarding, validation, and exhaustion behaviour
+# ===========================================================================
+
+
+class TestPoolAcquireTimeout:
+    @pytest.mark.asyncio
+    async def test_default_timeout_forwarded_to_pool_acquire(self) -> None:
+        """The default timeout MUST be forwarded as ``timeout=`` on every acquire."""
+        pool, _ = make_pool()
+        uid = uuid4()
+
+        async with user_scoped_connection(pool, uid):
+            pass
+
+        pool.acquire.assert_called_once_with(timeout=DEFAULT_POOL_ACQUIRE_TIMEOUT_SECS)
+
+    @pytest.mark.asyncio
+    async def test_custom_timeout_forwarded_to_pool_acquire(self) -> None:
+        pool, _ = make_pool()
+        uid = uuid4()
+
+        async with user_scoped_connection(pool, uid, pool_acquire_timeout_seconds=2.5):
+            pass
+
+        pool.acquire.assert_called_once_with(timeout=2.5)
+
+    @pytest.mark.asyncio
+    async def test_int_timeout_coerced_to_float(self) -> None:
+        """Passing ``int`` is convenient sugar for ``float``; both are valid."""
+        pool, _ = make_pool()
+        uid = uuid4()
+
+        async with user_scoped_connection(pool, uid, pool_acquire_timeout_seconds=3):
+            pass
+
+        pool.acquire.assert_called_once_with(timeout=3.0)
+
+    @pytest.mark.parametrize("bad_value", [0, 0.0, -0.001, -1, -100.0])
+    @pytest.mark.asyncio
+    async def test_rejects_non_positive_timeout(self, bad_value: float) -> None:
+        pool, _ = make_pool()
+        uid = uuid4()
+
+        with pytest.raises(ValueError, match="pool_acquire_timeout_seconds must be positive"):
+            async with user_scoped_connection(pool, uid, pool_acquire_timeout_seconds=bad_value):
+                pass  # pragma: no cover
+
+    @pytest.mark.parametrize("bad_value", [True, False])
+    @pytest.mark.asyncio
+    async def test_rejects_bool_timeout(self, bad_value: bool) -> None:
+        """``True`` / ``False`` are int subclasses; reject so they don't coerce to 1.0/0.0."""
+        pool, _ = make_pool()
+        uid = uuid4()
+
+        with pytest.raises(TypeError, match="pool_acquire_timeout_seconds must be float"):
+            async with user_scoped_connection(
+                pool,
+                uid,
+                pool_acquire_timeout_seconds=bad_value,  # type: ignore[arg-type]
+            ):
+                pass  # pragma: no cover
+
+    @pytest.mark.parametrize("bad_value", ["5", "5.0", None, [], {}])
+    @pytest.mark.asyncio
+    async def test_rejects_non_numeric_timeout(self, bad_value: Any) -> None:
+        pool, _ = make_pool()
+        uid = uuid4()
+
+        with pytest.raises(TypeError, match="pool_acquire_timeout_seconds must be float"):
+            async with user_scoped_connection(pool, uid, pool_acquire_timeout_seconds=bad_value):
+                pass  # pragma: no cover
+
+    @pytest.mark.asyncio
+    async def test_pool_exhausted_raises_timeout_error_within_budget(self) -> None:
+        """Pool with ``min_size=1, max_size=1`` + sole connection held: a
+        concurrent call to ``user_scoped_connection`` must raise an
+        ``asyncio.TimeoutError`` (NOT hang) within the requested budget.
+
+        This simulates asyncpg's real ``Pool._acquire`` behaviour using a
+        single-slot ``asyncio.Semaphore`` -- asyncpg internally wraps the
+        wait in ``compat.wait_for(timeout=...)`` which raises
+        ``asyncio.TimeoutError`` on expiry. Mirroring that contract here
+        keeps the test inside the fast (no-Docker) lane while still
+        proving the timeout is plumbed through end-to-end.
+
+        Scope of this test: validates that ``pool_acquire_timeout_seconds``
+        is forwarded to ``pool.acquire(timeout=...)`` AND that the
+        resulting ``asyncio.TimeoutError`` propagates out of the helper.
+        Does NOT exercise asyncpg's internal pool semantics (idle-recovery,
+        max_size enforcement, connection-state transitions); a regression
+        in those would be caught by integration tests against a real
+        Postgres + asyncpg pool, not here.
+        """
+        from contextlib import asynccontextmanager
+
+        sem = asyncio.Semaphore(1)
+        conn = MagicMock()
+        conn.execute = AsyncMock()
+        txn = MagicMock()
+        txn.__aenter__ = AsyncMock(return_value=txn)
+        txn.__aexit__ = AsyncMock(return_value=False)
+        conn.transaction = MagicMock(return_value=txn)
+
+        @asynccontextmanager
+        async def fake_acquire(*, timeout: float | None = None) -> Any:
+            if timeout is None:
+                await sem.acquire()
+            else:
+                await asyncio.wait_for(sem.acquire(), timeout=timeout)
+            try:
+                yield conn
+            finally:
+                sem.release()
+
+        pool = MagicMock()
+        pool.acquire = fake_acquire
+        uid = uuid4()
+
+        # Hold the sole connection from outside the helper.
+        async with fake_acquire():
+            loop = asyncio.get_event_loop()
+            start = loop.time()
+            with pytest.raises(asyncio.TimeoutError):
+                async with user_scoped_connection(pool, uid, pool_acquire_timeout_seconds=0.1):
+                    pass  # pragma: no cover  -- timeout fires before we get here
+            elapsed = loop.time() - start
+
+        # Sanity: timeout fired around 0.1s, definitely not indefinitely.
+        # Generous ceiling absorbs CI scheduling jitter without hiding
+        # a regression that lets the call hang.
+        assert elapsed < 1.0, f"acquire took {elapsed:.3f}s; expected ~0.1s"

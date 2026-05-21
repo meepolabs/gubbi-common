@@ -16,7 +16,10 @@ from uuid import uuid4
 
 import pytest
 
-from gubbi_common.db.user_scoped import user_scoped_connection_readonly
+from gubbi_common.db.user_scoped import (
+    DEFAULT_POOL_ACQUIRE_TIMEOUT_SECS,
+    user_scoped_connection_readonly,
+)
 
 
 def make_pool() -> tuple[Any, Any]:
@@ -203,3 +206,58 @@ async def test_readonly_does_not_terminate_on_clean_exit() -> None:
         pass
 
     conn.terminate.assert_not_called()
+
+
+# ===========================================================================
+# pool.acquire timeout: forwarding (parity with user_scoped_connection)
+# ===========================================================================
+
+
+@pytest.mark.asyncio
+async def test_readonly_default_timeout_forwarded_to_pool_acquire() -> None:
+    """The default pool-acquire timeout MUST be forwarded as ``timeout=`` on every acquire."""
+    pool, _ = make_pool()
+    uid = uuid4()
+
+    async with user_scoped_connection_readonly(pool, uid):
+        pass
+
+    pool.acquire.assert_called_once_with(timeout=DEFAULT_POOL_ACQUIRE_TIMEOUT_SECS)
+
+
+@pytest.mark.asyncio
+async def test_readonly_custom_timeout_forwarded_to_pool_acquire() -> None:
+    pool, _ = make_pool()
+    uid = uuid4()
+
+    async with user_scoped_connection_readonly(pool, uid, pool_acquire_timeout_seconds=2.5):
+        pass
+
+    pool.acquire.assert_called_once_with(timeout=2.5)
+
+
+@pytest.mark.parametrize("bad_value", [0, 0.0, -1, -0.001])
+@pytest.mark.asyncio
+async def test_readonly_rejects_non_positive_timeout(bad_value: float) -> None:
+    pool, _ = make_pool()
+    uid = uuid4()
+
+    with pytest.raises(ValueError, match="pool_acquire_timeout_seconds must be positive"):
+        async with user_scoped_connection_readonly(
+            pool, uid, pool_acquire_timeout_seconds=bad_value
+        ):
+            pass  # pragma: no cover
+
+
+@pytest.mark.parametrize("bad_value", [True, False, "5.0", None])
+@pytest.mark.asyncio
+async def test_readonly_rejects_bad_timeout_type(bad_value: Any) -> None:
+    """``bool`` / ``str`` / ``None`` must be rejected with TypeError."""
+    pool, _ = make_pool()
+    uid = uuid4()
+
+    with pytest.raises(TypeError, match="pool_acquire_timeout_seconds must be float"):
+        async with user_scoped_connection_readonly(
+            pool, uid, pool_acquire_timeout_seconds=bad_value
+        ):
+            pass  # pragma: no cover

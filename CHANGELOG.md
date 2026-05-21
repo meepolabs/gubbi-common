@@ -7,6 +7,38 @@ tag if they don't need the new surface. See
 release-tagging policy: not every commit gets a tag; tags mark stable
 adoption points.
 
+## 0.13.1 -- 2026-05-21
+
+### Added
+
+- ``gubbi_common.db.user_scoped_connection`` and
+  ``user_scoped_connection_readonly`` now accept a
+  ``pool_acquire_timeout_seconds: float`` keyword argument that is
+  forwarded as ``pool.acquire(timeout=...)``. Without a timeout, a slow
+  DB combined with many concurrent requests can exhaust the pool and
+  every request hangs forever waiting on a connection; with this
+  argument, asyncpg raises ``asyncio.TimeoutError`` after the budget
+  expires and the request returns a clean error rather than piling up.
+  Validation mirrors ``hnsw_ef_search``: ``bool`` is rejected (would
+  silently coerce to 1.0 / 0.0), non-numeric types raise ``TypeError``,
+  zero or negative values raise ``ValueError``.
+- ``DEFAULT_POOL_ACQUIRE_TIMEOUT_SECS = 5.0`` -- new module-level
+  constant exposing the default budget. Five seconds is generous
+  enough to absorb pool warm-up and brief contention spikes (healthy
+  acquires are sub-millisecond) while well under typical HTTP request
+  budgets, so the timeout only fires under genuine pool exhaustion or
+  DB-down conditions.
+
+### Consumer impact
+
+Additive. Existing callers that pass nothing inherit the 5.0 second
+default; previously their acquires were unbounded and could hang
+indefinitely on a saturated pool. No changes are required in gubbi or
+gubbi-cloud to pick up the new behaviour, but per-call overrides are
+available wherever a specific path needs a tighter or looser budget.
+
+---
+
 ## 0.13.0 -- 2026-05-14
 
 ### Added
