@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import date
-from uuid import UUID
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from datetime import date
+    from uuid import UUID
 
 
 def budget_key(user_id: UUID, period_start: date) -> str:

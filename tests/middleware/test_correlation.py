@@ -25,7 +25,7 @@ from gubbi_common.telemetry.logging import get_correlation_id
 
 def _reset_cid() -> None:
     """Reset the correlation ContextVar to its default."""
-    from gubbi_common.telemetry import logging as log_mod  # noqa: PLC0415
+    from gubbi_common.telemetry import logging as log_mod
 
     log_mod._correlation_id_var.set(None)  # type: ignore[union-attr]
 
@@ -45,7 +45,7 @@ class _CaptureApp:
         self,
         scope: dict[str, Any],
         receive: Callable,
-        send: Callable,  # noqa: ANN201
+        send: Callable,
     ) -> None:
         self.captured_cid = get_correlation_id()
         # Also let the response echo tests work by calling send through
@@ -60,7 +60,7 @@ class _EchoApp:
         self,
         scope: dict[str, Any],
         receive: Callable,
-        send: Callable,  # noqa: ANN201
+        send: Callable,
     ) -> None:
         await send({"type": "http.response.start", "status": 200, "headers": []})
         await send({"type": "http.response.body", "body": b"ok"})
@@ -73,7 +73,7 @@ class _ExistingHeaderApp:
         self,
         scope: dict[str, Any],
         receive: Callable,
-        send: Callable,  # noqa: ANN201
+        send: Callable,
     ) -> None:
         await send(
             {

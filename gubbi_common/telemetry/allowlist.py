@@ -28,8 +28,10 @@ global ``SPAN_ALLOWLIST`` table.
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping
-from typing import Any, Final
+from typing import TYPE_CHECKING, Any, Final
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 logger = logging.getLogger(__name__)
 

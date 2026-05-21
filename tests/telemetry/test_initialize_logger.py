@@ -38,7 +38,7 @@ def _cleanup_logging() -> Generator[None, None, None]:
     yield
 
     root = logging.getLogger()
-    from logging.handlers import (  # noqa: PLC0415
+    from logging.handlers import (
         TimedRotatingFileHandler,
     )
 
@@ -49,7 +49,7 @@ def _cleanup_logging() -> Generator[None, None, None]:
     root.setLevel(logging.WARNING)
 
     # Reset structlog so next initialize_logger gets a fresh chain.
-    import structlog._config as cfg  # noqa: PLC0415
+    import structlog._config as cfg
 
     cfg.reset_defaults()  # type: ignore[no-untyped-call]
 
@@ -75,7 +75,7 @@ async def test_initialize_logger_writes_json_to_file(tmp_path: Path) -> None:
     log_dir = tmp_path / "json_test"
     _ = initialize_logger("json_tester", log_dir=str(log_dir))
 
-    import structlog  # noqa: PLC0415
+    import structlog
 
     app_log = structlog.get_logger("json_tester")
     await app_log.info("hello", foo=1)  # type: ignore[arg-type]
@@ -101,7 +101,7 @@ async def test_initialize_logger_logger_name_present_in_log(tmp_path: Path) -> N
     log_dir = tmp_path / "name_test"
     _ = initialize_logger("unique_logger_x", log_dir=str(log_dir))
 
-    import structlog  # noqa: PLC0415
+    import structlog
 
     app_log = structlog.get_logger("unique_logger_x")
     await app_log.info("test.name", attr="val")
@@ -145,7 +145,7 @@ def test_otel_context_processor_adds_correlation_id() -> None:
                 "trace_id" not in result or result.get("trace_id") is None
             ), f"unexpected trace_id with invalid span: {result}"
         finally:
-            from gubbi_common.telemetry.logging import (  # noqa: PLC0415
+            from gubbi_common.telemetry.logging import (
                 _correlation_id_var,
             )
 
@@ -154,7 +154,7 @@ def test_otel_context_processor_adds_correlation_id() -> None:
 
 def test_telemetry_reexports_initialize_logger() -> None:
     """initialize_logger is accessible from gubbi_common.telemetry and in __all__."""
-    from gubbi_common import telemetry  # noqa: PLC0415
+    from gubbi_common import telemetry
 
     assert hasattr(telemetry, "initialize_logger")
     assert callable(telemetry.initialize_logger)
@@ -164,7 +164,7 @@ def test_telemetry_reexports_initialize_logger() -> None:
 
 def test_public_symbols_in_all_for_init() -> None:
     """Telemetry __all__ contains the expected public symbols."""
-    from gubbi_common.telemetry import __all__  # noqa: PLC0415
+    from gubbi_common.telemetry import __all__
 
     required = {
         "BANNED_KEYS",

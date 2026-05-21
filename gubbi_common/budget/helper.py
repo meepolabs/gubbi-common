@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import date
-from typing import Protocol
-from uuid import UUID
+from typing import TYPE_CHECKING, Protocol
 
 from gubbi_common.budget.keys import budget_key, dirty_member
+
+if TYPE_CHECKING:
+    from datetime import date
+    from uuid import UUID
 
 
 class _RedisScript(Protocol):

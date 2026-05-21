@@ -10,7 +10,7 @@ import sys
 def _run_in_subprocess(code: str) -> subprocess.CompletedProcess[str]:
     """Run *code* in a fresh Python process and return its result."""
     env = {**os.environ, "PYTHONNOUSERSITE": "1"}
-    return subprocess.run(  # noqa: S603 (hardcoded code strings, not user input)
+    return subprocess.run(
         [sys.executable, "-c", code],
         capture_output=True,
         text=True,

@@ -34,10 +34,10 @@ from logging import handlers
 from typing import TYPE_CHECKING, Any
 
 import structlog
-from structlog.types import EventDict, WrappedLogger
 
 if TYPE_CHECKING:
     from opentelemetry.trace import Span
+    from structlog.types import EventDict, WrappedLogger
 
 # ---------------------------------------------------------------------------
 # Correlation ID context var
@@ -451,8 +451,8 @@ def initialize_logger(logger_name: str, log_dir: str = "logs") -> structlog.stdl
 
 __all__ = [
     "StructuredLogFormatter",
-    "set_correlation_id",
-    "reset_correlation_id",
     "get_correlation_id",
     "initialize_logger",
+    "reset_correlation_id",
+    "set_correlation_id",
 ]

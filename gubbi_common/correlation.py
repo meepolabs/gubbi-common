@@ -34,15 +34,17 @@ itself earns its keep by naming the contract.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from gubbi_common.telemetry.logging import (
     get_correlation_id,
     reset_correlation_id,
     set_correlation_id,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 # Lowercased ASGI header name; ASGI spec lowercases all header keys in
 # the scope. Both consumers compare against this constant.

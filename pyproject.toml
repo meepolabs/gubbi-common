@@ -45,19 +45,20 @@ line-length = 100
 [tool.ruff.lint]
 select = [
     "E", "F", "B", "I", "N", "UP", "ANN", "S", "A", "C4", "T20", "PT", "RET", "SIM",
+    "PERF", "RUF", "TCH",
     # Docstring presence + format. D101/D102/D103 enforce public-class /
     # method / function docstrings; D200/D205/D400 enforce summary-line
     # format. Adopted from meepo-conventions baseline; tests/ are exempt
     # via per-file-ignores below.
     "D101", "D102", "D103", "D200", "D205", "D400",
 ]
-ignore = ["ANN401", "N818"]
+ignore = ["ANN401", "N818", "RUF001", "RUF002", "RUF003", "PERF203"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**/*.py" = ["S101", "PT011", "S105", "S106", "S107", "ANN", "D", "E501", "S603", "S607"]
+"tests/**/*.py" = ["S101", "PT011", "S105", "S106", "S107", "ANN", "D", "E501", "S603", "S607", "TCH"]
 # tools/ are CLI scripts -- argparse-driven, no untrusted input.
 "tools/**/*.py" = ["S603"]
 

@@ -28,8 +28,6 @@ purely as aliases.
 from __future__ import annotations
 
 import contextlib
-from collections.abc import Callable, MutableMapping
-from contextvars import Token
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
@@ -41,6 +39,9 @@ from gubbi_common.telemetry.logging import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Callable, MutableMapping
+    from contextvars import Token
+
     from starlette.types import ASGIApp, Receive, Scope, Send
 
 HEADER_NAME_BYTES = b"x-correlation-id"

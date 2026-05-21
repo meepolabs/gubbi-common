@@ -24,11 +24,12 @@ service, not the shared library.
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     import asyncpg
 
 __all__ = [

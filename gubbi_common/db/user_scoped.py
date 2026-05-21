@@ -28,12 +28,14 @@ not a runtime data condition). Callers must authenticate first.
 from __future__ import annotations
 
 import logging
-from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Final
+from typing import TYPE_CHECKING, Final
 from uuid import UUID
 
 import asyncpg
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
 
 logger = logging.getLogger(__name__)
 
@@ -160,7 +162,7 @@ async def __safe_reset(conn: asyncpg.Connection, guc: str) -> None:
         raise ValueError(f"GUC {guc!r} not in _GUC_ALLOWLIST; safe-reset refused")
     try:
         await conn.execute(f"RESET {guc}")
-    except Exception as exc:  # noqa: BLE001 -- defensive cleanup must never mask
+    except Exception as exc:
         logger.warning("RESET %s failed during scoped-connection exit: %s", guc, exc)
 
 
@@ -263,7 +265,7 @@ async def user_scoped_connection_readonly(
             # re-raised so cancellation / failure still propagates.
             try:
                 await conn.execute("SET SESSION CHARACTERISTICS AS TRANSACTION READ WRITE")
-            except BaseException as exc:  # noqa: BLE001 -- includes CancelledError on purpose
+            except BaseException as exc:
                 logger.warning(
                     "RESET TRANSACTION READ WRITE failed; terminating connection to "
                     "prevent pool poisoning: error=%s error_type=%s",

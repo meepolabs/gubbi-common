@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 import os
-from collections.abc import Callable, Sequence
+from typing import TYPE_CHECKING
 
 from opentelemetry import trace as _otel_trace
 from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
@@ -20,6 +20,9 @@ from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import SpanProcessor, TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Sequence
 
 __all__ = [
     "configure_otel",
@@ -167,5 +170,5 @@ def safe_instrument(name: str, factory: Callable[[], None]) -> None:
     try:
         factory()
         logger.debug("%s auto-instrumentation wired", name)
-    except Exception as exc:  # noqa: BLE001 -- defensive boundary, intent is broad swallow
+    except Exception as exc:
         logger.warning("%s instrumentor failed: %s", name, exc)
