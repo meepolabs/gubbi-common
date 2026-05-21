@@ -7,6 +7,29 @@ tag if they don't need the new surface. See
 release-tagging policy: not every commit gets a tag; tags mark stable
 adoption points.
 
+## 0.13.2 -- 2026-05-21
+
+### Added
+
+- ``gubbi_common.constants.RESOURCE_DOCUMENTATION_URL`` -- new shared
+  constant for the public-facing OAuth Protected Resource Metadata
+  ``resource_documentation`` field (RFC 9728). Add ``RESOURCE_DOCUMENTATION_URL``
+  shared constant so consumers stop duplicating the OAuth Protected
+  Resource Metadata docs URL. Re-exported from the top-level
+  ``gubbi_common`` package so ``from gubbi_common import
+  RESOURCE_DOCUMENTATION_URL`` works.
+
+### Consumer impact
+
+Additive. Both gubbi (``gubbi/oauth/wellknown.py``) and gubbi-cloud
+(``gubbi_cloud/api/main.py``) currently hardcode the same literal
+``"https://gubbi.ai/docs/mcp"`` in their Protected Resource Metadata
+payloads. Bumping to this tag lets both repos replace the literal with
+``from gubbi_common import RESOURCE_DOCUMENTATION_URL`` and the URL
+moves in one place. No behaviour change until the consumers cut over.
+
+---
+
 ## 0.13.1 -- 2026-05-21
 
 ### Added
