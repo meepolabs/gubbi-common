@@ -70,8 +70,8 @@ known-first-party = ["gubbi_common"]
 # (B4 Q1=A). Each strict flag here is also set in at least one sibling repo;
 # adding the missing ones removes "works on my repo" surprises when shared
 # contracts move between repos. `python_version` is 3.12 to match the
-# canonical dev/CI version (and sibling repos); the package floor stays at
-# `python = "^3.11"` for self-host compatibility.
+# canonical dev/CI version (and sibling repos) and the package floor pinned
+# in [tool.poetry.dependencies] above.
 python_version = "3.12"
 warn_return_any = true
 warn_unused_configs = true
