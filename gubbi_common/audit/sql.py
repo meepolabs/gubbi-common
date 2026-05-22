@@ -50,7 +50,7 @@ from opentelemetry.trace import Status, StatusCode
 
 from gubbi_common.audit.targets import TargetKind
 from gubbi_common.correlation import get_correlation_id
-from gubbi_common.telemetry.allowlist import is_banned_key
+from gubbi_common.telemetry.allowlist import is_banned_key, safe_set_attributes
 
 if TYPE_CHECKING:
     import asyncpg
@@ -112,6 +112,36 @@ AUDIT_WRITE_SPAN_NAME: Final[str] = "audit.write"
 # already keys on the span name (not the tracer name); cloud follows
 # the same convention.
 _TRACER_NAME: Final[str] = "gubbi_common.audit"
+
+
+# Per-span allowlist used to filter ``audit.write`` span attributes
+# through :func:`gubbi_common.telemetry.allowlist.safe_set_attributes`.
+# Owned here (not by the per-service allowlists in
+# ``gubbi/telemetry/attrs.py`` and ``gubbi-cloud/gubbi_cloud/telemetry/attrs.py``)
+# because the audit writers live in this package and emit the span
+# directly; routing through a per-service wrapper would require threading
+# the allowlist through every call site.
+#
+# Intentionally excludes ``actor_id``, ``target_id``, and ``target_kind``:
+# ``target_id`` carries external-system identifiers in some callers
+# (Stripe subscription IDs, SHA256 email hashes) and reaching the OTel
+# backend with those values is a privacy regression. ``actor_id`` may
+# be a UUID or a ``hydra_subject:<sub>`` prefix tied to an end user.
+# Both are stored durably on the audit row's columns, so the span is
+# only an additional projection -- dropping them from telemetry does
+# not lose forensic capability. The remaining attrs (``event_type``,
+# ``actor_type``, ``success``, ``latency_ms``) are bounded enums or
+# numerics with no PII surface.
+_AUDIT_WRITE_ALLOWLIST: Final[dict[str, frozenset[str]]] = {
+    AUDIT_WRITE_SPAN_NAME: frozenset(
+        {
+            "event_type",
+            "actor_type",
+            "success",
+            "latency_ms",
+        }
+    ),
+}
 
 
 # Values the audit_log.actor_type CHECK constraint accepts. Must stay in
@@ -402,8 +432,14 @@ async def record_audit_async(
     Caller owns transaction lifecycle. Executes a single INSERT inside
     whatever transaction (or autocommit context) the caller has open.
     Emits an ``audit.write`` OTel span carrying ``event_type``,
-    ``target_id``, ``actor_type``, ``success``, and ``latency_ms``
-    attributes (per the gubbi span shape).
+    ``actor_type``, ``success``, and ``latency_ms`` attributes, filtered
+    through :data:`_AUDIT_WRITE_ALLOWLIST` via
+    :func:`gubbi_common.telemetry.allowlist.safe_set_attributes`.
+    ``actor_id``, ``target_id``, and ``target_kind`` are intentionally
+    NOT placed on the span: ``target_id`` carries external-system IDs
+    (e.g. Stripe ``sub_xxx``) that must not reach the OTel backend, and
+    ``actor_id`` may be a UUID or a ``hydra_subject:<sub>`` prefix
+    bound to a real user. Both are stored durably on the audit row.
 
     Parameters
     ----------
@@ -484,17 +520,23 @@ async def record_audit_async(
     start_ns = time.monotonic_ns()
     audit_success = False
     with tracer.start_as_current_span(AUDIT_WRITE_SPAN_NAME) as span:
-        attrs: dict[str, Any] = {
-            "event_type": action,
-            "actor_type": actor_type,
-            "actor_id": actor_id,
-        }
-        if target_id is not None:
-            attrs["target_id"] = target_id
-        if target_kind is not None:
-            attrs["target_kind"] = str(target_kind)
-        for key, value in attrs.items():
-            span.set_attribute(key, value)
+        # Route through ``safe_set_attributes`` so the span attributes are
+        # filtered against ``_AUDIT_WRITE_ALLOWLIST``. Curated to only the
+        # bounded-enum / numeric attrs here; ``actor_id``, ``target_id``,
+        # and ``target_kind`` are intentionally NOT set on the span (see
+        # the allowlist constant for rationale -- ``target_id`` can carry
+        # external-system identifiers like Stripe subscription IDs that
+        # must not reach the OTel backend). The audit row's columns store
+        # those values durably.
+        safe_set_attributes(
+            AUDIT_WRITE_SPAN_NAME,
+            span,
+            {
+                "event_type": action,
+                "actor_type": actor_type,
+            },
+            allowlist=_AUDIT_WRITE_ALLOWLIST,
+        )
 
         try:
             # Coerce target_kind to str explicitly: asyncpg's codec
@@ -526,8 +568,15 @@ async def record_audit_async(
             raise
         finally:
             latency_ms = (time.monotonic_ns() - start_ns) / _NS_PER_MS
-            span.set_attribute("success", audit_success)
-            span.set_attribute("latency_ms", round(latency_ms, 2))
+            safe_set_attributes(
+                AUDIT_WRITE_SPAN_NAME,
+                span,
+                {
+                    "success": audit_success,
+                    "latency_ms": round(latency_ms, 2),
+                },
+                allowlist=_AUDIT_WRITE_ALLOWLIST,
+            )
 
 
 async def record_audit_deduped_async(
@@ -618,17 +667,18 @@ async def record_audit_deduped_async(
     audit_success = False
     inserted = False
     with tracer.start_as_current_span(AUDIT_WRITE_SPAN_NAME) as span:
-        attrs: dict[str, Any] = {
-            "event_type": action,
-            "actor_type": actor_type,
-            "actor_id": actor_id,
-        }
-        if target_id is not None:
-            attrs["target_id"] = target_id
-        if target_kind is not None:
-            attrs["target_kind"] = str(target_kind)
-        for key, value in attrs.items():
-            span.set_attribute(key, value)
+        # See ``record_audit_async`` for the rationale on routing through
+        # ``safe_set_attributes`` and the curated key set. Mirrored here
+        # so both writers emit the same span shape.
+        safe_set_attributes(
+            AUDIT_WRITE_SPAN_NAME,
+            span,
+            {
+                "event_type": action,
+                "actor_type": actor_type,
+            },
+            allowlist=_AUDIT_WRITE_ALLOWLIST,
+        )
 
         try:
             # See ``record_audit_async`` for the asyncpg codec rationale
@@ -654,6 +704,13 @@ async def record_audit_deduped_async(
             raise
         finally:
             latency_ms = (time.monotonic_ns() - start_ns) / _NS_PER_MS
-            span.set_attribute("success", audit_success)
-            span.set_attribute("latency_ms", round(latency_ms, 2))
+            safe_set_attributes(
+                AUDIT_WRITE_SPAN_NAME,
+                span,
+                {
+                    "success": audit_success,
+                    "latency_ms": round(latency_ms, 2),
+                },
+                allowlist=_AUDIT_WRITE_ALLOWLIST,
+            )
     return inserted
