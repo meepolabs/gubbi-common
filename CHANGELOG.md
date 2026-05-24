@@ -7,6 +7,30 @@ tag if they don't need the new surface. See
 release-tagging policy: not every commit gets a tag; tags mark stable
 adoption points.
 
+## 0.14.0 -- 2026-05-24
+
+### Added
+
+- ``gubbi_common.bootstrap.probe_runner``: ``StartupProbe`` Protocol +
+  ``StartupRunner`` orchestrator + ``ProbeStatus`` / ``ProbeResult`` /
+  ``ProbeOutcome`` types. Per-probe timeout, total boot budget, OTel
+  span emission (``startup.probe.<name>``), structured failure log
+  with deque-buffered ``log_tail``, optional outcome counter callback.
+- ``gubbi_common.bootstrap.testing.RecordingProbeRunner``: test helper
+  that captures probe order without invoking ``probe.run()``. Used by
+  consumer apps to pin canonical lifespan probe order.
+
+### Consumer impact
+
+Additive. New module under ``gubbi_common.bootstrap``; existing
+``probe_pg_log_settings`` surface is unchanged. Consumers (gubbi,
+gubbi-cloud, extraction worker) adopt the runner Protocol in T1/T2 to
+unify their lifespan startup probes; until they cut over, the new
+symbols are dormant. The runner is framework-free and stays inside
+the ``check_gubbi_common_purity.py`` deny-list (no new ALLOW entries).
+
+---
+
 ## 0.13.2 -- 2026-05-21
 
 ### Added
