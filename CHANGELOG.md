@@ -24,8 +24,8 @@ adoption points.
 
 Additive. New module under ``gubbi_common.bootstrap``; existing
 ``probe_pg_log_settings`` surface is unchanged. Consumers (gubbi,
-gubbi-cloud, extraction worker) adopt the runner Protocol in T1/T2 to
-unify their lifespan startup probes; until they cut over, the new
+gubbi-cloud, extraction worker) adopt the runner Protocol in their
+lifespan startup probe wiring; until they cut over, the new
 symbols are dormant. The runner is framework-free and stays inside
 the ``check_gubbi_common_purity.py`` deny-list (no new ALLOW entries).
 
@@ -99,7 +99,7 @@ available wherever a specific path needs a tighter or looser budget.
   ``set_correlation_id`` / ``get_correlation_id`` /
   ``reset_correlation_id`` (canonical contextvar handles, aliased from
   ``gubbi_common.telemetry.logging`` so downstream code has one import
-  point). Closes B5 Q1=A.
+  point).
 - ``tools/check_gubbi_common_purity.py`` -- new lint script: walks
   every ``.py`` file under ``gubbi_common/`` and FAILS CI on any
   RUNTIME import from a deny-list of framework packages (fastapi,
@@ -109,7 +109,7 @@ available wherever a specific path needs a tighter or looser budget.
   RUNTIME (it IS runtime). One ALLOW exception is documented inline
   for ``db/user_scoped.py`` (asyncpg is required at runtime there;
   declared as the ``[db]`` optional extra in pyproject). Wired into
-  ``.github/workflows/test.yml`` as a lint-job step. Closes B5 Q3=A+C.
+  ``.github/workflows/test.yml`` as a lint-job step.
 
 ### Changed
 
@@ -141,19 +141,19 @@ the typed envelope.
 
 ### Changed
 
-- mypy flag set converged across the three Python repos (B4 Q1=A): added
+- mypy flag set converged across the three Python repos: added
   ``disallow_untyped_calls``, ``disallow_any_generics``,
   ``strict_equality``, ``extra_checks``, ``no_implicit_reexport``. No
   fix-up sites needed in gubbi-common -- the new flags passed cleanly.
 - ``trace_get_current_span()`` return annotated as ``Span`` (was
-  inferred ``Any``). B4 Q2 closing C2 MEDIUM #10.
+  inferred ``Any``).
 
 ### Docs
 
 - ``client_ip.py`` module docstring: rephrase the historical-bug note
-  around "rightmost XFF (DEC-086 rule 4)" -- the prior wording said
-  "leftmost" in a context that misled future readers about the fix
-  direction.
+  around "rightmost XFF (rule 4 of the locked client-IP policy)" -- the
+  prior wording said "leftmost" in a context that misled future readers
+  about the fix direction.
 - New regression test ``tests/telemetry/test_allowlist.py::test_content_hash_is_not_banned``
   pins the audit-log dedup key against future changes to
   ``DERIVATIVE_MODIFIERS`` or the order-of-checks in ``is_banned_key``.
@@ -173,7 +173,7 @@ identical behavior to 0.11.0.
   wrapper around ``AUDIT_INSERT_DEDUPED_SQL`` so dedup callers do not
   have to write raw SQL with positional args. Applies actor_id
   validation, banned-key metadata redaction, and metadata size cap.
-  Emits an ``audit.write`` OTel span. Closes the S2 LOW-1 footgun where
+  Emits an ``audit.write`` OTel span. Closes the footgun where
   actor_id strings (``"stripe_webhook"`` / ``"kratos_webhook"``) bypass
   ``_validate_audit_id`` when callers reach for the raw SQL constant.
 - ``gubbi_common.telemetry.otel.safe_instrument(name, factory)`` -- shared
@@ -181,27 +181,26 @@ identical behavior to 0.11.0.
   swallows + WARNINGs on failure so a broken instrumentor (driver
   missing, signature drift) cannot crash startup. Both gubbi and
   gubbi-cloud call this helper instead of duplicating per-instrumentor
-  try/except blocks (S8 H3 + S8 M-2). A7 Q1.
+  try/except blocks.
 
 ### Changed
 
 - ``gubbi_common.audit.sql.AUDIT_INSERT_SQL`` is now the canonical
   10-column INSERT including ``target_kind``. The argument was already
   accepted by ``record_audit_async`` but silently dropped on the floor
-  -- it now persists on the row. Closes S2 MEDIUM (record_audit_async
-  target_kind footgun). A3 Q1.
+  -- it now persists on the row. Closes the ``record_audit_async``
+  ``target_kind`` footgun.
 - ``record_audit_async`` now emits an ``audit.write`` OTel span carrying
   ``event_type``, ``target_id``, ``actor_type``, ``success``, and
   ``latency_ms`` (gubbi's existing span shape). Cloud webhook + admin
   audit writes get spans for free without per-site instrumentation.
-  A3 Q1.
 
 ### Removed
 
 - ``AUDIT_INSERT_SHORT_SQL`` -- the legacy 6-column shape used by the
   pre-consolidation Kratos / billing call sites. All call sites migrated
   to ``record_audit_async`` (canonical) or ``record_audit_deduped_async``
-  (dedup) in the A3 cross-repo bump.
+  (dedup) in the cross-repo audit-writer consolidation.
 - ``AUDIT_INSERT_SQL_RICH`` -- the 7-column shape carrying
   ``occurred_at`` for wire-timestamp parity. The DB default
   ``occurred_at TIMESTAMPTZ NOT NULL DEFAULT now()`` covers the same
@@ -228,24 +227,25 @@ identical behavior to 0.11.0.
   an absolute http(s) URL (raises ``PRMUrlError`` otherwise),
   normalises trailing slashes, and returns
   ``<origin>/.well-known/oauth-protected-resource[/mcp]``. The
-  ``legacy_suffix=True`` default preserves DEC-083 cutover compat;
-  flipping the default to ``False`` is tracked as backlog item
-  ``prm-legacy-suffix-cutover``. Closes C-009 (PRM URL coherence broken
-  across cloud-api and gubbi: formula was duplicated across at least
-  four call sites with subtly different concatenation, no shared
-  helper). Re-exported from ``gubbi_common.auth``.
+  ``legacy_suffix=True`` default preserves cutover compatibility with
+  the older suffix-bearing form; flipping the default to ``False`` is
+  tracked as backlog item ``prm-legacy-suffix-cutover``. Closes the PRM
+  URL coherence gap where the formula was duplicated across cloud-api
+  and gubbi at four call sites with subtly different concatenation, no
+  shared helper. Re-exported from ``gubbi_common.auth``.
 - ``gubbi_common.http.client_ip(request, *, trust_forwarded_headers)
-  -> str | None`` -- DEC-086-locked client-IP extractor. RIGHTMOST
-  X-Forwarded-For when ``trust_forwarded_headers=True`` (the trusted
-  proxy stamp); socket address otherwise; ``None`` when neither is
-  available. Promoted verbatim from gubbi-cloud's
+  -> str | None`` -- canonical client-IP extractor (rightmost-XFF when
+  trusted, socket fallback otherwise). RIGHTMOST X-Forwarded-For when
+  ``trust_forwarded_headers=True`` (the trusted proxy stamp); socket
+  address otherwise; ``None`` when neither is available. Promoted
+  verbatim from gubbi-cloud's
   ``webhooks/kratos/_auth.py:_extract_client_ip`` to close the
   recurring bug where the gubbi-side copy at ``oauth/forms.py``
-  silently flipped to LEFTMOST XFF (DEC-086 rule 4 violation).
+  silently flipped to LEFTMOST XFF (violating the rightmost-XFF rule).
   ``trust_forwarded_headers`` is keyword-only by design so the policy
   is per-call visible at every site.
 - 5 new ``Action`` enum members for the M4 Stripe webhook surface
-  (B4 wiring lands in cloud-api once the SHA-pin promotes them):
+  (cloud-api wiring lands once the SHA-pin promotes them):
   ``SUBSCRIPTION_TRIAL_ENDING_NOTICED`` (``subscription.trial_ending.noticed``),
   ``SUBSCRIPTION_PAYMENT_FAILED`` (``subscription.payment_failed``),
   ``SUBSCRIPTION_PAYMENT_SUCCEEDED`` (``subscription.payment_succeeded``),
@@ -268,24 +268,23 @@ identical behavior to 0.11.0.
 
 ### Cross-refs
 
-- C-009 (PRM URL coherence): ``gubbi_common.auth.prm.build_prm_metadata_url``
+- PRM URL coherence: ``gubbi_common.auth.prm.build_prm_metadata_url``
   is the helper. Both cloud-api and gubbi consume it; the
-  ``legacy_suffix=True`` default is gated by DEC-083 cutover policy.
-- DEC-086 (client-IP extraction): ``gubbi_common.http.client_ip``
-  is the canonical implementation. Rule 4 (rightmost XFF when
-  trusted) is locked here.
-- M2-M4 HIGH B4 (Stripe ``@audited(audit_fn=...)`` retrofit) imports
-  the 5 new ``Action`` members; B4 is hard-blocked on this release
+  ``legacy_suffix=True`` default is gated by the cutover policy.
+- Client-IP extraction: ``gubbi_common.http.client_ip`` is the canonical
+  implementation. The rightmost-XFF-when-trusted rule is locked here.
+- The Stripe ``@audited(audit_fn=...)`` retrofit imports the 5 new
+  ``Action`` members; the retrofit is hard-blocked on this release
   shipping and the SHA-pin landing in both consumers.
 
 ### Consumer impact
 
 Additive. Two new helpers, 5 new Action members, no behaviour change
 for existing imports. Both consumers (gubbi, gubbi-cloud) re-pin to
-this SHA in a coordinated Wave 1.5 step (M2-M4 HIGH plan) and rewire
-4 call sites (auth_middleware, gubbi/main.py, oauth/forms.py,
-kratos/_auth.py) to the new helpers; the consumer rewires are tracked
-under B2-T5, NOT in this release.
+this SHA in a coordinated step and rewire 4 call sites
+(auth_middleware, gubbi/main.py, oauth/forms.py, kratos/_auth.py) to
+the new helpers; the consumer rewires are tracked separately, NOT in
+this release.
 
 ## 0.9.1 -- 2026-05-11
 
@@ -330,7 +329,7 @@ under B2-T5, NOT in this release.
 Both gubbi and gubbi-cloud must pass ``target_kind`` on every audit
 write that carries a ``target_id`` (otherwise ``record_audit_async``
 raises ``ValueError``). Cross-repo atomic re-pin lands in a follow-up
-PR per the locked C-1/C-2 plan.
+PR per the locked cross-repo coordination plan.
 
 ## 0.9.0 -- 2026-05-11
 
@@ -489,32 +488,31 @@ class-level marks and any ``event_loop`` fixture overrides.
   values are simply absent from the bound dict (NOT bound as ``None``),
   so log calls in early-pipeline middleware before auth/subscription
   bind those values still work cleanly. Consolidates ~10 lines of
-  duplicated binding logic that would otherwise live in each consumer
-  (CO.50 prep).
+  duplicated binding logic that would otherwise live in each consumer.
 
 **Non-breaking (additive).** No signature changes to any existing
 public API.
 
-**Consumer impact:** optional. Per-repo migrations land as CO.50-gubbi
-and CO.50-cloud, which adopt ``bound_logger`` in route handlers and
-standardise logger naming to ``structlog.get_logger(__name__)``.
+**Consumer impact:** optional. Per-repo migrations adopt
+``bound_logger`` in route handlers and standardise logger naming to
+``structlog.get_logger(__name__)``.
 
 ## 0.7.0 -- 2026-05-06
 
 ### Added
 
 - ``gubbi_common.middleware.CorrelationIDMiddleware`` -- ASGI middleware
-  promoted from gubbi and gubbi-cloud (CO.29.4). Manages the request
+  promoted from gubbi and gubbi-cloud. Manages the request
   ``correlation_id`` contextvar with optional ``echo_header`` and
   ``span_attribute_setter`` callback parameters. Stays free of FastAPI
   and OTel coupling -- consumers wire their own attribute allowlist
   via the callback.
 - ``gubbi_common.telemetry.otel.configure_otel(service_name, endpoint, *,
   enabled=True)`` and ``get_tracer()`` -- OTel SDK wiring promoted from
-  gubbi-cloud (CO.29.3). Auto-instrumentors stay in consumers (FastAPI,
+  gubbi-cloud. Auto-instrumentors stay in consumers (FastAPI,
   asyncpg, redis, httpx remain per-repo concerns).
 - ``gubbi_common.telemetry.logging.initialize_logger(logger_name,
-  log_dir="logs")`` -- structlog setup promoted from gubbi (CO.29.5).
+  log_dir="logs")`` -- structlog setup promoted from gubbi.
   Includes the ``_add_otel_context`` processor that enriches every log
   event with ``correlation_id``, ``trace_id``, and ``span_id``.
 
@@ -535,8 +533,8 @@ standardise logger naming to ``structlog.get_logger(__name__)``.
 public API.
 
 **Consumer impact:** optional per-module adoption. Per-repo migrations
-land as Batch 2: CO.29.3-{gubbi,cloud}, CO.29.4-{gubbi,cloud},
-CO.29.5-{gubbi,cloud}. Consumers still on 0.6.x continue to work.
+adopt the new helpers in a follow-up batch. Consumers still on 0.6.x
+continue to work.
 
 ## 0.6.0 -- 2026-05-06
 - Promoted ``gubbi_common.auth.hydra`` (TokenClaims dataclass + Hydra exception hierarchy) from gubbi / gubbi-cloud.
