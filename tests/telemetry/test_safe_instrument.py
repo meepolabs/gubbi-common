@@ -1,6 +1,6 @@
 """Tests for ``gubbi_common.telemetry.otel.safe_instrument``.
 
-Extracted as part of A7 Q1: both gubbi and gubbi-cloud need an
+Both gubbi and gubbi-cloud need an
 auto-instrumentor wrapper that swallows per-library failures so a
 broken Instrumentor cannot crash startup. Tests assert:
 

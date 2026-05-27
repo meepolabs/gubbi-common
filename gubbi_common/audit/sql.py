@@ -290,7 +290,7 @@ def _normalize_ip(ip_address: str | None) -> str | None:
     string is truthy in Python -- without the strip, ``ipaddress.ip_address(" ")``
     would raise ``ValueError`` and surface as "invalid ip_address ' '" to
     the caller. Treating leading/trailing whitespace as "no address" is
-    the more useful boundary behaviour for optional callers; pre-A3 code
+    the more useful boundary behaviour for optional callers; earlier code
     did this implicitly via an upstream ``.strip()``.
     """
     if ip_address is None:
@@ -368,7 +368,7 @@ def _validate_actor_and_target(
     """Apply the actor/target validation rules shared by both writers.
 
     ``actor_id`` is shape-validated (UUID or one of the
-    ``_AUDIT_ID_PREFIXES``) -- the S2 LOW-1 footgun fix.
+    ``_AUDIT_ID_PREFIXES``) -- the actor_id footgun fix.
 
     ``target_id`` is NOT shape-validated: callers persist a mix of
     domain-internal IDs (conversation integers, entry integers,
@@ -600,7 +600,7 @@ async def record_audit_deduped_async(
     span. Returns ``True`` when the row was inserted, ``False`` when
     ON CONFLICT skipped the write (re-delivery dedup).
 
-    Closes the S2 LOW-1 footgun where actor_id strings like
+    Closes the footgun where actor_id strings like
     ``"stripe_webhook"`` / ``"kratos_webhook"`` bypass validation when
     callers use raw SQL. ``target_id`` is NOT shape-validated here:
     dedup callers persist external-system IDs (Stripe subscription IDs,

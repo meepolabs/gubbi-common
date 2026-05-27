@@ -1,7 +1,7 @@
 """Tests for ``gubbi_common.http.client_ip``.
 
-Locks the DEC-086 rule 4 invariant (rightmost X-Forwarded-For when
-trusted) and the safe-by-default fallback shape. Promoted from the
+Locks the trusted-proxy rightmost-X-Forwarded-For invariant and the
+safe-by-default fallback shape. Promoted from the
 cloud-side ``_extract_client_ip`` parametrization so both consumer
 repos share a single regression suite.
 """
@@ -48,7 +48,7 @@ def _make_request(
 
 @pytest.mark.unit
 def test_returns_rightmost_xff_when_trusted() -> None:
-    """DEC-086 rule 4: the trusted-proxy stamp is the RIGHTMOST entry."""
+    """The trusted-proxy stamp is the RIGHTMOST X-Forwarded-For entry."""
     req = _make_request(xff="1.2.3.4, 5.6.7.8, 9.10.11.12", client_host="10.0.0.1")
     assert client_ip(req, trust_forwarded_headers=True) == "9.10.11.12"
 

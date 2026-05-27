@@ -344,7 +344,7 @@ def test_is_banned_alias_still_works() -> None:
 
 
 # ===========================================================================
-# A-M1: case-insensitive banned-key check
+# case-insensitive banned-key check
 # ===========================================================================
 
 
@@ -362,7 +362,7 @@ def test_is_banned_alias_still_works() -> None:
     ],
 )
 def test_is_banned_key_case_insensitive(key: str) -> None:
-    """A-M1: mixed/upper-case keys must hit the same ban as lower-case.
+    """Mixed/upper-case keys must hit the same ban as lower-case.
 
     Without normalisation, ``Email`` would slip past the substring check
     against the lower-case BANNED_KEYS entries -- a silent privacy regression.

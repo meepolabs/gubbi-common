@@ -59,7 +59,7 @@ def configure_otel(
       ``OTLPMetricExporter`` pointed at *endpoint* (the local otel-collector
       gRPC port).
 
-    Resource attributes (S8 M-1):
+    Resource attributes:
 
     * ``service.name`` -- always set from the *service_name* arg.
     * ``service.version`` -- set when *service_version* is provided.
@@ -72,7 +72,7 @@ def configure_otel(
     ``deployment.environment=staging`` always wins over the in-process
     default. Without the in-process defaults, HyperDX traces carry no
     ``service.version`` or ``deployment.environment`` tag because neither
-    Dockerfile nor Kamal config sets ``OTEL_RESOURCE_ATTRIBUTES`` today.
+    the Dockerfile nor the deploy config sets ``OTEL_RESOURCE_ATTRIBUTES`` today.
 
     ``extra_processors`` -- additional :class:`SpanProcessor` instances
     registered alongside the default ``BatchSpanProcessor``. Threaded

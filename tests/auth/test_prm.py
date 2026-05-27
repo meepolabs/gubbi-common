@@ -2,7 +2,7 @@
 
 Locks the contract for RFC 9728 PRM metadata URL composition that both
 cloud-api and gubbi consume. The four parametrized cases mirror the
-architect doc H-A3 test plan; ``test_self_host_shape`` covers the gubbi
+documented test plan; ``test_self_host_shape`` covers the gubbi
 self-host path-prefix shape.
 """
 
@@ -29,7 +29,7 @@ def test_builds_legacy_form(resource_url: str) -> None:
 
 @pytest.mark.unit
 def test_builds_legacy_form_default_arg() -> None:
-    """``legacy_suffix`` defaults to True for DEC-083 cutover compat."""
+    """``legacy_suffix`` defaults to True for cutover compat."""
     out = build_prm_metadata_url("https://mcp.gubbi.ai")
     assert out == "https://mcp.gubbi.ai/.well-known/oauth-protected-resource/mcp"
 

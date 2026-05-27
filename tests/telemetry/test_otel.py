@@ -63,7 +63,7 @@ print(configured is returned)
 print(returned is not None)
 """
 
-# S8 M-1: in-process default for service.version + deployment.environment.
+# In-process default for service.version + deployment.environment.
 # OTEL_RESOURCE_ATTRIBUTES is unset in this script so the kwargs win.
 _VERSION_ENV_DEFAULT_SCRIPT = """\
 import os
@@ -83,7 +83,7 @@ print(attrs.get("service.version"))
 print(attrs.get("deployment.environment"))
 """
 
-# S8 M-1: env override overlays the kwargs (per OTel spec). The env value
+# Env override overlays the kwargs (per OTel spec). The env value
 # for ``deployment.environment`` must win even when the kwarg sets a
 # different value.
 _VERSION_ENV_OVERRIDE_SCRIPT = """\
@@ -108,9 +108,9 @@ print(attrs.get("deployment.environment"))
 print(attrs.get("custom.attr"))
 """
 
-# S8 M-1: omitting both new kwargs leaves the resource without those keys
-# unless OTEL_RESOURCE_ATTRIBUTES sets them. Pre-B3 callers stay
-# observationally identical.
+# Omitting both new kwargs leaves the resource without those keys
+# unless OTEL_RESOURCE_ATTRIBUTES sets them. Callers that pass no kwargs
+# stay observationally identical.
 _NO_VERSION_KWARGS_SCRIPT = """\
 import os
 os.environ.pop("OTEL_RESOURCE_ATTRIBUTES", None)
@@ -181,7 +181,7 @@ class TestGetTracer:
 
 
 class TestServiceVersionAndDeploymentEnv:
-    """S8 M-1 (B3): service.version + deployment.environment resource attrs."""
+    """service.version + deployment.environment resource attrs."""
 
     def test_kwargs_populate_resource_attributes(self) -> None:
         """Caller-supplied kwargs land on the Resource as default attrs.
@@ -217,7 +217,7 @@ class TestServiceVersionAndDeploymentEnv:
         assert lines[3] == "xyz"  # custom env attr preserved
 
     def test_omitting_kwargs_leaves_attrs_unset(self) -> None:
-        """Pre-B3 call sites (no kwargs, no OTEL_RESOURCE_ATTRIBUTES) get
+        """Call sites with no kwargs and no OTEL_RESOURCE_ATTRIBUTES get
         only ``service.name`` -- backward-compatible default."""
         result = _run_in_subprocess(_NO_VERSION_KWARGS_SCRIPT)
         assert (

@@ -66,8 +66,8 @@ convention = "google"
 known-first-party = ["gubbi_common"]
 
 [tool.mypy]
-# Flag set converged to the union across gubbi / gubbi-cloud / gubbi-common
-# (B4 Q1=A). Each strict flag here is also set in at least one sibling repo;
+# Flag set converged to the union across gubbi / gubbi-cloud / gubbi-common.
+# Each strict flag here is also set in at least one sibling repo;
 # adding the missing ones removes "works on my repo" surprises when shared
 # contracts move between repos. `python_version` is 3.12 to match the
 # canonical dev/CI version (and sibling repos) and the package floor pinned

@@ -486,7 +486,7 @@ def test_ensure_ascii_false_preserves_unicode() -> None:
 
 
 # Note: The hardcoded ``test_version_is_0110`` literal pin that lived
-# here was retired in v0.13.0 (B5). ``tests/test_version_coherence.py``
+# here was retired in v0.13.0. ``tests/test_version_coherence.py``
 # already enforces the (pyproject == __version__ == CHANGELOG) invariant
 # in a release-bump-friendly way; the single-version literal pin became
 # noise that had to be hand-edited on every bump.

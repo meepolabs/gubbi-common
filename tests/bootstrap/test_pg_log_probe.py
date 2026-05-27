@@ -83,7 +83,7 @@ async def test_log_statement_all_warn_logs_only(caplog: pytest.LogCaptureFixture
 async def test_off_mode_no_op(caplog: pytest.LogCaptureFixture) -> None:
     """OFF returns early without inspecting any setting, but emits a
     warning so the operator sees that the safety net is intentionally
-    disabled (A-M5).
+    disabled.
     """
     import logging
 

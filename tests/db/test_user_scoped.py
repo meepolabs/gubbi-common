@@ -144,7 +144,7 @@ class TestUserScopedConnection:
 
 
 # ===========================================================================
-# H-16.1 / .2 / .3 / .4: RESET-on-exit + ef_search guard + strict int
+# RESET-on-exit + ef_search guard + strict int
 # ===========================================================================
 
 

@@ -1,4 +1,4 @@
-"""Tests for tools/check_gubbi_common_purity.py (B5 Q3 lint).
+"""Tests for tools/check_gubbi_common_purity.py (purity lint).
 
 Validates the AST walker by feeding it pure-source strings rather than
 real files; the walker is implemented as a pure function for exactly
@@ -171,7 +171,7 @@ def test_qualified_type_checking_attribute_is_recognised() -> None:
 
 @pytest.mark.unit
 def test_non_typing_attribute_named_type_checking_is_runtime() -> None:
-    """R1 fix-pass guard: only ``typing.TYPE_CHECKING`` (or bare) is exempt.
+    """Guard: only ``typing.TYPE_CHECKING`` (or bare) is exempt.
 
     A runtime guard like ``if some_obj.TYPE_CHECKING:`` must NOT bypass
     the lint -- ``some_obj`` may be a runtime-truthy attribute. Pre-fix
@@ -252,7 +252,7 @@ def test_deny_list_includes_expected_packages() -> None:
         "stripe",
         "pgvector",
         "bcrypt",
-        # R1 fix-pass extension: cover sibling-repo runtime deps.
+        # Extended to cover sibling-repo runtime deps.
         # Use the IMPORT name (PyJWT installs as ``jwt``).
         "jwt",
         "cryptography",

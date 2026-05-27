@@ -1,4 +1,4 @@
-"""Lint gubbi-common for runtime imports of framework packages (B5 Q3).
+"""Lint gubbi-common for runtime imports of framework packages.
 
 gubbi-common is the cross-repo contract layer between gubbi (the MCP
 server) and gubbi-cloud (the gateway). Runtime coupling to a web
@@ -64,7 +64,7 @@ DENY_LIST: frozenset[str] = frozenset(
         "stripe",
         "pgvector",
         "bcrypt",
-        # R1 fix-pass (2026-05-14): extend to cover sibling-repo runtime
+        # Extended to cover sibling-repo runtime
         # deps that could leak into gubbi-common as silently as the
         # original 13. Use the IMPORT name, not the distribution name --
         # PyJWT installs as ``jwt``; cryptography is the same.
@@ -111,6 +111,7 @@ class Violation:
     root_module: str
 
     def message(self) -> str:
+        """Return a one-line failure description for this violation."""
         return (
             f"{self.rel_path}:{self.line} -- runtime import of {self.imported!r} "
             f"is denied (root={self.root_module!r}). "
@@ -136,7 +137,7 @@ def _root_module(name: str) -> str:
 def _is_type_checking_test(test: ast.expr) -> bool:
     """Return True if ``test`` is the ``TYPE_CHECKING`` boolean expression.
 
-    Recognises only the canonical forms (R1 fix-pass: tightened from
+    Recognises only the canonical forms (tightened from
     matching any ``*.TYPE_CHECKING`` to only the canonical typing-module
     references)::
 
@@ -255,10 +256,11 @@ def _out(msg: str, file: Any = sys.stdout) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """CLI entry point: scan the package and exit nonzero on any deny-list violation."""
     parser = argparse.ArgumentParser(
         description=(
             "Fail CI when gubbi-common imports a deny-listed framework "
-            "package at runtime (B5 Q3=A+C). Imports inside "
+            "package at runtime. Imports inside "
             "`if TYPE_CHECKING:` are exempt."
         )
     )

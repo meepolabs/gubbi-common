@@ -1,23 +1,19 @@
 """Client-IP extraction with safe-by-default trust-forwarded-headers semantics.
 
-Locked by DEC-086. Callers MUST pass ``trust_forwarded_headers``
-explicitly so the policy is per-call visible. Returns ``None`` when no
-IP is recoverable.
+Callers MUST pass ``trust_forwarded_headers`` explicitly so the policy
+is per-call visible. Returns ``None`` when no IP is recoverable.
 
 Promoted from gubbi-cloud (``webhooks/kratos/_auth.py:_extract_client_ip``)
-to close H-A4: gubbi's local copy at ``oauth/forms.py:client_ip`` had
-silently regressed away from the rightmost X-Forwarded-For entry
-(DEC-086 rule 4 violation -- it was reading the client-controllable
-leftmost hop instead of the trusted-proxy stamp).
+because gubbi's local copy at ``oauth/forms.py:client_ip`` had silently
+regressed away from the rightmost X-Forwarded-For entry (it read the
+client-controllable leftmost hop instead of the trusted-proxy stamp).
 The correct implementation has been written multiple times and gotten
-subtly wrong each time; one helper, byte-identical, signed-off in
-DEC-086 prose, kills the recurrence.
+subtly wrong each time; one byte-identical helper kills the recurrence.
 
-DEC-086 rule 4: when a single trusted proxy fronts the app, the
-RIGHTMOST X-Forwarded-For entry is the proxy-appended hop and is the
-only one not controllable by the untrusted client. Reading the leftmost
-entry lets a client spoof the source IP for any audit/log/rate-limit
-keyed on it.
+When a single trusted proxy fronts the app, the RIGHTMOST
+X-Forwarded-For entry is the proxy-appended hop and is the only one not
+controllable by the untrusted client; audit/log/rate-limit keys must
+derive from it rather than the client-controllable leftmost entry.
 """
 
 from __future__ import annotations
@@ -72,7 +68,7 @@ class _RequestLike(Protocol):
 
 
 def client_ip(request: _RequestLike, *, trust_forwarded_headers: bool) -> str | None:
-    """Return the originating client IP per DEC-086 rule 4.
+    """Return the originating client IP.
 
     When ``trust_forwarded_headers=True`` the RIGHTMOST X-Forwarded-For
     entry is treated as the trusted-proxy stamp. When ``False`` the XFF
@@ -95,7 +91,7 @@ def client_ip(request: _RequestLike, *, trust_forwarded_headers: bool) -> str | 
         ``Request`` satisfies this.
     trust_forwarded_headers:
         Keyword-only by design. Must be supplied per call so the
-        policy is visible at the call site (DEC-086 rule).
+        policy is visible at the call site.
 
     Returns
     -------

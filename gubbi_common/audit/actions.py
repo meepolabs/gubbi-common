@@ -2,8 +2,8 @@
 
 The ``audit_log`` table is owned by gubbi. Both gubbi and
 gubbi-cloud write rows into it. Before this module existed, the
-``Action`` enum was duplicated in each repo with no drift guard
-(M3-review finding 3.3, CRITICAL): a rename in gubbi would let
+``Action`` enum was duplicated in each repo with no drift guard:
+a rename in gubbi would let
 cloud-api keep writing the old string and silently break downstream
 queries.
 
@@ -42,7 +42,7 @@ class Action(StrEnum):
     # ---------------------------------------------------------------
     # Namespaced ``identity.*`` so downstream queries can filter every
     # identity-shaped event with ``action LIKE 'identity.%'``. gubbi
-    # Alembic migration 0015 rewrites legacy ``user.*`` rows from M2 to
+    # Alembic migration 0015 rewrites legacy ``user.*`` rows to
     # the ``identity.*`` namespace.
     IDENTITY_CREATED = "identity.created"
     IDENTITY_UPDATED = "identity.updated"
@@ -58,7 +58,7 @@ class Action(StrEnum):
     TENANT_DEPROVISIONED = "tenant.deprovisioned"
     # Emitted when a tenant row is orphaned (user_id set to NULL via
     # ON DELETE SET NULL on the tenants.user_id FK). See cloud-api
-    # migration 0008 (m-real-bugs-cloud / M-3.2).
+    # migration 0008.
     TENANT_ORPHANED = "tenant.orphaned"
 
     # ---------------------------------------------------------------
@@ -67,13 +67,13 @@ class Action(StrEnum):
     LOGIN_FAILED = "login_failed"
 
     # ---------------------------------------------------------------
-    # Subscription lifecycle (M4+)
+    # Subscription lifecycle
     # ---------------------------------------------------------------
     SUBSCRIPTION_CREATED = "subscription.created"
     SUBSCRIPTION_UPDATED = "subscription.updated"
     SUBSCRIPTION_CANCELED = "subscription.canceled"
     SUBSCRIPTION_OVERRIDE = "subscription.override"
-    # Stripe webhook handlers wired in M2-M4 HIGH B4 (post-pin-bump). The
+    # Stripe webhook handlers (post-pin-bump). The
     # enum members land in v0.10.0; the handler @audited(audit_fn=...)
     # wiring lands in the consumer repo once the SHA-pin promotes them.
     SUBSCRIPTION_TRIAL_ENDING_NOTICED = "subscription.trial_ending.noticed"
@@ -86,8 +86,8 @@ class Action(StrEnum):
     # Billing gates
     # ---------------------------------------------------------------
     # Emitted when a billing operation (checkout, portal link) is
-    # blocked because the user's email is not yet verified. See H-13
-    # backlog: cloud-api previously used the raw literal string
+    # blocked because the user's email is not yet verified. cloud-api
+    # previously used the raw literal string
     # "billing.email_unverified_blocked" pending this enum entry.
     BILLING_EMAIL_UNVERIFIED_BLOCKED = "billing.email_unverified_blocked"
 
@@ -167,13 +167,13 @@ _CLOUD_REFERENCED: frozenset[str] = frozenset(
         "tenant.orphaned",  # in flight via tenant-audit task (kratos.py)
         "tenant.reactivated",  # planned cloud tenant lifecycle
         "tenant.suspended",  # planned cloud tenant lifecycle
-        # M2-M4 HIGH B4 Stripe handlers (defined here in v0.10.0; wired in
+        # Stripe handlers (defined here in v0.10.0; wired in
         # cloud-api once the SHA-pin lands).
-        "checkout.session.expired",  # webhooks/stripe/handlers/checkout_expired.py (B4)
-        "subscription.payment_action_required",  # webhooks/stripe/handlers/payment_action_required.py (B4) # noqa: E501
-        "subscription.payment_failed",  # webhooks/stripe/handlers/invoice.py (B4)
-        "subscription.payment_succeeded",  # webhooks/stripe/handlers/invoice.py (B4)
-        "subscription.trial_ending.noticed",  # webhooks/stripe/handlers/subscription.py (B4)
+        "checkout.session.expired",  # webhooks/stripe/handlers/checkout_expired.py
+        "subscription.payment_action_required",  # webhooks/stripe/handlers/payment_action_required.py # noqa: E501
+        "subscription.payment_failed",  # webhooks/stripe/handlers/invoice.py
+        "subscription.payment_succeeded",  # webhooks/stripe/handlers/invoice.py
+        "subscription.trial_ending.noticed",  # webhooks/stripe/handlers/subscription.py
     }
 )
 

@@ -19,7 +19,7 @@ Both consumers share the same core behaviour:
 
 ``starlette`` provides the ASGI type imports used here. They are
 imported inside a ``TYPE_CHECKING`` guard so gubbi-common does not pull
-``starlette`` at runtime (B5 Q3 purity rule). The ASGI middleware itself
+``starlette`` at runtime (purity rule). The ASGI middleware itself
 does not need anything from ``starlette`` at runtime; it operates on
 plain ASGI scope/receive/send callables typed via ``starlette.types``
 purely as aliases.

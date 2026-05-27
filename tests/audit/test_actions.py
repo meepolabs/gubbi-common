@@ -54,9 +54,9 @@ def test_subscription_lifecycle_values_present() -> None:
 
 @pytest.mark.unit
 def test_new_subscription_action_members_present() -> None:
-    """B2 (M2-M4 HIGH round) added 5 Stripe-webhook Action members in v0.10.0.
+    """Five Stripe-webhook Action members were added in v0.10.0.
 
-    These land in the enum ahead of the consumer rewires (B4) so the
+    These land in the enum ahead of the consumer rewires so the
     SHA-pin promotes them before the @audited(audit_fn=...) decorators
     reference them.
     """
@@ -149,7 +149,7 @@ def test_all_action_values_referenced_by_consumers() -> None:
 
 
 # ===========================================================================
-# M-11: StrEnum migration with explicit __str__ override (3.11/3.12 parity)
+# StrEnum migration with explicit __str__ override (3.11/3.12 parity)
 # ===========================================================================
 
 

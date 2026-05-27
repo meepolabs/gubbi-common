@@ -9,7 +9,7 @@ Single source of truth across gubbi + gubbi-cloud. Instances of
 :mod:`gubbi_common.telemetry.logging` so consumers have one canonical
 import point: ``from gubbi_common.correlation import ...``).
 
-B5 Q1 (locked 2026-05-13): correlation_id canonical home is
+The correlation_id canonical home is
 gubbi-common. Both gubbi (MCP server) and gubbi-cloud (gateway) import
 this module instead of redefining their own helpers. Mirrors the
 existing canonical-in-gubbi-common patterns for XFF parsing
@@ -68,7 +68,7 @@ class CorrelationContext:
     pass through awaitables without accidental mutation. ``slots`` keeps
     the per-request allocation cheap.
 
-    **Status (B5 R1, 2026-05-14): forward-compat shape.** Today's
+    **Status: forward-compat shape.** Today's
     consumers (gubbi-cloud auth + subscription middleware) use
     ``cid_from_scope`` directly and pass the raw string through. The
     dataclass exists so future plumbing that wants typed propagation

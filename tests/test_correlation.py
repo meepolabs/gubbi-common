@@ -1,4 +1,4 @@
-"""Tests for the canonical correlation_id module (B5 Q1)."""
+"""Tests for the canonical correlation_id module."""
 
 from __future__ import annotations
 

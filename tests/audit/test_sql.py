@@ -67,7 +67,7 @@ def test_valid_actor_types_set() -> None:
     assert frozenset({"user", "admin", "system", "hydra_subject"}) == VALID_ACTOR_TYPES
 
 
-# TODO(m234-low): VALID_ACTOR_TYPES <-> DB CHECK constraint sync test.
+# TODO: VALID_ACTOR_TYPES <-> DB CHECK constraint sync test.
 # The audit_log.actor_type CHECK constraint is defined in consumer migrations
 # (gubbi Alembic migration 0012), NOT emitted from gubbi_common/audit/sql.py.
 # Until the library either:
@@ -313,7 +313,7 @@ async def test_record_audit_async_invalid_ip_chains_cause() -> None:
 
 
 # ---------------------------------------------------------------------------
-# H-17.2: metadata size cap + banned-key redaction
+# metadata size cap + banned-key redaction
 # ---------------------------------------------------------------------------
 
 
@@ -493,7 +493,7 @@ def test_redact_metadata_shallow_passes() -> None:
 
 
 # ---------------------------------------------------------------------------
-# A-M2: tuple recursion in redaction
+# Tuple recursion in redaction
 # ---------------------------------------------------------------------------
 
 
@@ -535,7 +535,7 @@ async def test_record_audit_async_tuple_metadata_redacted() -> None:
 
 
 # ---------------------------------------------------------------------------
-# H-17.3: actor_id / target_id shape validation (UUID or known prefix)
+# actor_id / target_id shape validation (UUID or known prefix)
 # ---------------------------------------------------------------------------
 
 
@@ -654,7 +654,7 @@ async def test_target_id_arbitrary_string_accepted() -> None:
     """target_id passes through verbatim -- conversation integers,
     Stripe sub_xxx, SHA256 email hashes all coexist in the column.
 
-    The shape-validation is only applied to actor_id (S2 LOW-1).
+    The shape-validation is only applied to actor_id.
     """
     conn = _StubConn()
     await record_audit_async(
@@ -709,16 +709,16 @@ async def test_record_audit_async_accepts_action_enum_member() -> None:
 
 
 # ---------------------------------------------------------------------------
-# A3: target_kind persisted on the canonical INSERT path
+# target_kind persisted on the canonical INSERT path
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
 @pytest.mark.unit
 async def test_record_audit_async_persists_target_kind() -> None:
-    """target_kind must be written to the audit row (regression for S2 MEDIUM).
+    """target_kind must be written to the audit row (regression guard).
 
-    Before A3 the canonical INSERT was 9 columns and target_kind was
+    Previously the canonical INSERT was 9 columns and target_kind was
     accepted but dropped on the floor. The 10-column INSERT must place
     target_kind in the right positional slot for the dedup index to
     discriminate kinds.
@@ -742,7 +742,7 @@ async def test_record_audit_async_persists_target_kind() -> None:
 
 
 # ---------------------------------------------------------------------------
-# A3: record_audit_deduped_async wrapper
+# record_audit_deduped_async wrapper
 # ---------------------------------------------------------------------------
 
 
@@ -877,7 +877,7 @@ async def test_record_audit_deduped_async_rejects_oversize_metadata() -> None:
 
 
 # ---------------------------------------------------------------------------
-# M-1 (R2): target_kind shape validation
+# target_kind shape validation
 #
 # ``TargetKind`` is the single source of truth (see
 # ``gubbi_common/audit/targets.py``). A typo string like ``"usr"`` or an

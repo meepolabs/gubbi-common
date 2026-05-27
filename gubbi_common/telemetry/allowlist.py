@@ -1,4 +1,4 @@
-"""Per-span attribute allowlist enforcement (DEC-070).
+"""Per-span attribute allowlist enforcement.
 
 Hard rule: NO journal content -- and NO raw PII -- in spans, metrics, or
 structured logs. This module is the **primary defense**: banned keys are

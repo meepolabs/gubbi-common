@@ -728,7 +728,7 @@ async def test_non_required_fail_observability_outcome_is_warn(
 async def test_outcome_counter_exception_does_not_abort_run(
     logger: AsyncBoundLogger,
 ) -> None:
-    """M5 contract: counter bug must not abort boot."""
+    """Contract: counter bug must not abort boot."""
 
     def _exploding_counter(*, name: str, outcome: str, app_env: str) -> None:
         del name, outcome, app_env
@@ -757,7 +757,7 @@ async def test_outcome_counter_exception_does_not_abort_run(
 async def test_error_message_scrubs_url_credentials(
     logger: AsyncBoundLogger,
 ) -> None:
-    """M6 contract: scheme://user:pass@host -> scheme://***@host in error_message."""
+    """Contract: scheme://user:pass@host -> scheme://***@host in error_message."""
 
     async def _explode(_probe: FakeProbe) -> ProbeResult:
         raise ConnectionError(

@@ -98,13 +98,13 @@ async def test_readonly_happy_path_yields_conn() -> None:
 
 
 # ===========================================================================
-# A-M4: SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY enforcement
+# SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY enforcement
 # ===========================================================================
 
 
 @pytest.mark.asyncio
 async def test_readonly_sets_transaction_read_only_before_gucs() -> None:
-    """A-M4: the read-only declaration runs BEFORE the GUC prologue.
+    """The read-only declaration runs BEFORE the GUC prologue.
 
     Without this ordering, an erroring set_config call could leak a
     writable session for the duration of the with-block (which is
@@ -130,7 +130,7 @@ async def test_readonly_sets_transaction_read_only_before_gucs() -> None:
 
 @pytest.mark.asyncio
 async def test_readonly_clears_read_only_on_exit() -> None:
-    """A-M4: cleanup restores READ WRITE so the pool stays writable for next checkout."""
+    """Cleanup restores READ WRITE so the pool stays writable for next checkout."""
     pool, conn = make_pool()
     uid = uuid4()
 
@@ -142,7 +142,7 @@ async def test_readonly_clears_read_only_on_exit() -> None:
 
 
 # ===========================================================================
-# A-M4 (round-2): pool-poisoning prevention -- terminate() on READ WRITE failure
+# Pool-poisoning prevention -- terminate() on READ WRITE failure
 # ===========================================================================
 
 
