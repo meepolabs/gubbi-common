@@ -18,8 +18,8 @@ import pytest
 from gubbi_common.bootstrap import (
     PgLogProbeError,
     PgLogProbeMode,
-    probe_pg_log_settings,
 )
+from gubbi_common.bootstrap.pg_log_probe import _probe_pg_log_settings as probe_pg_log_settings
 
 # Settings the probe consults via ``current_setting(name, true)``.
 # Order matters only for assertion clarity; the probe queries each in turn.

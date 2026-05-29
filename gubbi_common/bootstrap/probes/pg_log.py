@@ -1,8 +1,9 @@
 """Postgres log-settings ``StartupProbe`` wrapper.
 
-Wraps :func:`gubbi_common.bootstrap.probe_pg_log_settings` in a
-``StartupProbe`` shape so :class:`gubbi_common.bootstrap.StartupRunner`
-can sequence it alongside other startup probes.  Mode is consumed from
+Wraps :func:`gubbi_common.bootstrap.pg_log_probe._probe_pg_log_settings`
+in a ``StartupProbe`` shape so
+:class:`gubbi_common.bootstrap.StartupRunner` can sequence it alongside
+other startup probes.  Mode is consumed from
 ``settings.pg_log_probe_mode`` (``STRICT`` / ``WARN`` / ``OFF``):
 ``STRICT`` raises on any unsafe GUC; ``WARN`` logs in-place and returns;
 ``OFF`` skips the probe entirely.
@@ -27,7 +28,7 @@ from typing import TYPE_CHECKING
 from gubbi_common.bootstrap.pg_log_probe import (
     PgLogProbeError,
     PgLogProbeMode,
-    probe_pg_log_settings,
+    _probe_pg_log_settings,
 )
 from gubbi_common.bootstrap.probe_runner import ProbeResult, ProbeStatus
 
@@ -42,7 +43,7 @@ class PgLogProbe:
     """Probe that fails when Postgres log GUCs would capture plaintext.
 
     Constructor-injected wrapper around
-    :func:`gubbi_common.bootstrap.probe_pg_log_settings`.  STRICT mode
+    :func:`gubbi_common.bootstrap.pg_log_probe._probe_pg_log_settings`.  STRICT mode
     raises on any unsafe setting; the wrapper catches the exception and
     returns a structured FAIL ``ProbeResult`` so the diagnostic shape
     matches across consumers (mode + findings).
@@ -65,14 +66,14 @@ class PgLogProbe:
     async def run(self) -> ProbeResult:
         """Check Postgres log GUCs; fail or warn per ``mode``.
 
-        ``probe_pg_log_settings`` raises ``PgLogProbeError`` only in
+        ``_probe_pg_log_settings`` raises ``PgLogProbeError`` only in
         STRICT mode -- WARN logs in-place and returns; OFF skips the
         DB query.  So the except branch fires only when STRICT detected
         unsafe GUCs; ``required=True`` makes the FAIL escalate to
         ``ProbeFailure`` and abort boot.
         """
         try:
-            await probe_pg_log_settings(self.pool, mode=self.mode)
+            await _probe_pg_log_settings(self.pool, mode=self.mode)
         except PgLogProbeError as exc:
             return ProbeResult(
                 ProbeStatus.FAIL,

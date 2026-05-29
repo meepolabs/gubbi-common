@@ -22,6 +22,14 @@ repos:
       - id: mypy
         exclude: ^(tests/)
 
+  - repo: local
+    hooks:
+      - id: check-no-double-prefix
+        name: check-no-double-prefix
+        language: system
+        entry: python gubbi_common/tools/check_no_double_prefix.py
+        types: [python]
+
   # Secret scanning at commit time. The CI gitleaks workflow is the
   # second line of defense; this hook catches leaks before they reach
   # the remote.

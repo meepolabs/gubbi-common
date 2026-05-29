@@ -3,7 +3,6 @@
 from gubbi_common.bootstrap.pg_log_probe import (
     PgLogProbeError,
     PgLogProbeMode,
-    probe_pg_log_settings,
 )
 from gubbi_common.bootstrap.probe_runner import (
     OutcomeCounterCallback,
@@ -33,5 +32,4 @@ __all__ = [
     "StartupBudgetExceeded",
     "StartupProbe",
     "StartupRunner",
-    "probe_pg_log_settings",
 ]

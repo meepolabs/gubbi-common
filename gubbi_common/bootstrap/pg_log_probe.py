@@ -35,7 +35,6 @@ if TYPE_CHECKING:
 __all__ = [
     "PgLogProbeError",
     "PgLogProbeMode",
-    "probe_pg_log_settings",
 ]
 
 logger = logging.getLogger(__name__)
@@ -126,7 +125,7 @@ _PROBES: tuple[tuple[str, Callable[[str], bool], str], ...] = (
 )
 
 
-async def probe_pg_log_settings(
+async def _probe_pg_log_settings(
     pool: asyncpg.Pool,
     *,
     mode: PgLogProbeMode | str = PgLogProbeMode.STRICT,
@@ -155,7 +154,7 @@ async def probe_pg_log_settings(
         resolved_mode = PgLogProbeMode(mode)
     except ValueError as exc:
         raise ValueError(
-            f"probe_pg_log_settings: mode must be one of "
+            f"_probe_pg_log_settings: mode must be one of "
             f"{[m.value for m in PgLogProbeMode]}; got {mode!r}"
         ) from exc
 

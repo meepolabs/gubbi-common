@@ -149,7 +149,7 @@ async def test_pg_log_probe_propagates_underlying_pg_log_probe_error_via_caught_
         raise PgLogProbeError("Unsafe Postgres log settings detected:\n  - log_statement=all")
 
     monkeypatch.setattr(
-        "gubbi_common.bootstrap.probes.pg_log.probe_pg_log_settings",
+        "gubbi_common.bootstrap.probes.pg_log._probe_pg_log_settings",
         _raise,
     )
 

@@ -7,6 +7,18 @@ tag if they don't need the new surface. See
 release-tagging policy: not every commit gets a tag; tags mark stable
 adoption points.
 
+## 0.15.0 -- 2026-05-29
+
+### Removed
+- `gubbi_common.bootstrap.probe_pg_log_settings` -- the bare async helper has been
+  renamed to module-private `_probe_pg_log_settings` and dropped from
+  `gubbi_common.bootstrap.__all__`. `PgLogProbe` is now the sole public path for
+  the postgres-log GUC guard. Use `from gubbi_common.bootstrap.probes import PgLogProbe`
+  instead. Consumer impact: none in this monorepo (no production code imports the
+  bare helper).
+
+---
+
 ## 0.14.0 -- 2026-05-24
 
 ### Added
