@@ -87,6 +87,39 @@ extra_checks = true
 no_implicit_reexport = true
 disable_error_code = "import-untyped"
 
+# ---------------------------------------------------------------------------
+# Test-only overrides. Production strictness above is unchanged.
+# Each block targets a narrow test path and silences ONE error code that is
+# noise for an established test pattern in this repo.
+# ---------------------------------------------------------------------------
+
+# Audit enum value tests. Action / TargetKind extend (str, Enum); the suite
+# asserts ``Action.X == "x.value"`` directly to lock the wire string. Mypy
+# treats the LHS Literal[Action.X] and RHS Literal["x.value"] as
+# non-overlapping even though the comparison succeeds at runtime via
+# str-mixin equality. The tests intentionally skip ``.value`` to keep
+# assertions one-token wide.
+[[tool.mypy.overrides]]
+module = ["tests.audit.test_actions", "tests.audit.test_targets"]
+disable_error_code = ["comparison-overlap"]
+
+# Hand-rolled ASGI test scaffolds (_CaptureApp / _EchoApp / Sender etc.) use
+# bare ``Callable`` / ``dict[str, Any]`` for scope/receive/send rather than
+# the strict starlette ASGI3 ``MutableMapping`` Callable signatures. The
+# scaffolds are runtime-compatible; the type mismatch is local to this file.
+[[tool.mypy.overrides]]
+module = "tests.middleware.test_correlation"
+disable_error_code = ["arg-type", "return-value", "type-arg", "no-any-return"]
+
+# AsyncBoundLogger.info / warning / error are coroutines. The tests rely on
+# structlog.testing.capture_logs() recording call args before the coroutine
+# is awaited (or never -- captured side effect is enough), so the unawaited
+# coroutine is intentional. Production callers always ``await`` and stay
+# strict.
+[[tool.mypy.overrides]]
+module = "tests.telemetry.test_bound_logger"
+disable_error_code = ["unused-coroutine"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = "test_*.py"

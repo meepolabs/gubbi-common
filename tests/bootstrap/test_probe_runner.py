@@ -807,7 +807,7 @@ async def test_log_tail_snapshot_alias_insulated_from_post_call_mutation(
         payload = {"items": [1, 2, 3], "depth": 1}
         await log.info("snapshot", payload=payload)
         # Mutate after the call -- captured snapshot must not see this.
-        payload["items"].append(99)
+        payload["items"].append(99)  # type: ignore[attr-defined]
         payload["depth"] = 999
         return ProbeResult(status=ProbeStatus.FAIL)
 

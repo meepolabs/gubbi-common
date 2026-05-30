@@ -70,7 +70,7 @@ def _make_record(
 
 def parse_line(line: str) -> dict[str, Any]:
     """Deserialize one JSON log line."""
-    return json.loads(line)
+    return json.loads(line)  # type: ignore[no-any-return]
 
 
 # ---------------------------------------------------------------------------

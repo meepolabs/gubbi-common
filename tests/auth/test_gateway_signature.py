@@ -91,7 +91,9 @@ def test_build_signature_changes_with_path() -> None:
 @pytest.mark.unit
 def test_round_trip_returns_none() -> None:
     sig = _sig()
-    result = verify_signature(_SECRET, sig, _USER, _SCOPES, _TS, _METHOD, _PATH, now=_NOW)
+    # ``verify_signature`` returns None; capture-and-assert is intentional
+    # to lock that contract in. mypy's [func-returns-value] flags it.
+    result = verify_signature(_SECRET, sig, _USER, _SCOPES, _TS, _METHOD, _PATH, now=_NOW)  # type: ignore[func-returns-value]
     assert result is None
 
 
@@ -155,21 +157,21 @@ def test_future_timestamp_raises() -> None:
 def test_within_tolerance_past_skew_succeeds() -> None:
     sig = _sig()
     later = _NOW + timedelta(seconds=25)
-    assert verify_signature(_SECRET, sig, _USER, _SCOPES, _TS, _METHOD, _PATH, now=later) is None
+    assert verify_signature(_SECRET, sig, _USER, _SCOPES, _TS, _METHOD, _PATH, now=later) is None  # type: ignore[func-returns-value]
 
 
 @pytest.mark.unit
 def test_within_tolerance_future_skew_succeeds() -> None:
     sig = _sig()
     earlier = _NOW - timedelta(seconds=25)
-    assert verify_signature(_SECRET, sig, _USER, _SCOPES, _TS, _METHOD, _PATH, now=earlier) is None
+    assert verify_signature(_SECRET, sig, _USER, _SCOPES, _TS, _METHOD, _PATH, now=earlier) is None  # type: ignore[func-returns-value]
 
 
 @pytest.mark.unit
 def test_exact_max_skew_boundary_succeeds() -> None:
     sig = _sig()
     later = _NOW + timedelta(seconds=MAX_SKEW_SECONDS)
-    assert verify_signature(_SECRET, sig, _USER, _SCOPES, _TS, _METHOD, _PATH, now=later) is None
+    assert verify_signature(_SECRET, sig, _USER, _SCOPES, _TS, _METHOD, _PATH, now=later) is None  # type: ignore[func-returns-value]
 
 
 # ---------------------------------------------------------------------------
@@ -272,7 +274,10 @@ def test_verify_signature_rejects_pipe_in_any_field(field: str) -> None:
     }
     fields[field] = "value|with|pipe"
     with pytest.raises(ValueError, match="canonicalisation"):
-        verify_signature(_SECRET, sig, **fields, now=_NOW)
+        # ``fields`` is dict[str, str]; verify_signature has positional
+        # parameters of mixed type (incl. timestamp: int). The parametrised
+        # test feeds them by name -- mypy can't narrow the **dict here.
+        verify_signature(_SECRET, sig, **fields, now=_NOW)  # type: ignore[arg-type]
 
 
 # ---------------------------------------------------------------------------
@@ -290,10 +295,13 @@ def test_verify_uses_constant_time_compare(
     real_compare = _hmac_module.compare_digest
 
     def _spy(a: str | bytes, b: str | bytes) -> bool:
+        # hmac.compare_digest expects Buffer, but the production caller
+        # routes ``str`` through it (str | bytes mirrors that surface).
+        # The spy preserves the same call shape it observes.
         calls.append((str(a), str(b)))
-        return real_compare(a, b)
+        return real_compare(a, b)  # type: ignore[arg-type]
 
-    monkeypatch.setattr(gateway_signature.hmac, "compare_digest", _spy)
+    monkeypatch.setattr(gateway_signature.hmac, "compare_digest", _spy)  # type: ignore[attr-defined]
     sig = _sig()
     verify_signature(_SECRET, sig, _USER, _SCOPES, _TS, _METHOD, _PATH, now=_NOW)
     assert len(calls) == 1
