@@ -7,8 +7,9 @@ name: cross-repo-validate
 # Secret requirements:
 #   GUBBI_CLOUD_PAT (GitHub personal access token with repo scope) must be
 #   created in the gubbi-common repo Settings > Secrets and variables > Actions.
-#   Without it, the gubbi-cloud matrix entry skips gracefully; the gubbi step
-#   still runs unconditionally and blocks merge on failure.
+#   Without it, the gubbi-cloud matrix entry fails fast at the verify step
+#   with an actionable error; the gubbi step still runs unconditionally and
+#   blocks merge on failure.
 
 on:
   pull_request:
@@ -28,9 +29,9 @@ jobs:
     timeout-minutes: 30
     # The `secrets` context is not available in step-level `if` conditions
     # (only in `env`, `with`, `run`). Mirror the secret into a job-level env
-    # var so the gubbi-cloud-specific guards can read it via `env`. When the
-    # PAT is missing, every gubbi-cloud step skips via its own guard,
-    # leaving only the warning step to run.
+    # var so the gubbi-cloud-specific guards can read it via `env`. The verify
+    # step below fails the job when the PAT is missing on a gubbi-cloud entry,
+    # so subsequent `env.GUBBI_CLOUD_PAT != ''` checks are belt-and-braces.
     env:
       GUBBI_CLOUD_PAT: ${{ secrets.GUBBI_CLOUD_PAT }}
     strategy:
@@ -77,23 +78,32 @@ jobs:
           virtualenvs-create: true
           virtualenvs-in-project: false
 
-      # -- Warn only for gubbi-cloud when PAT is empty -----------------------
-      - name: GUBBI_CLOUD_PAT warning (info)
-        if: matrix.cloud && env.GUBBI_CLOUD_PAT == ''
+      # -- Fail fast when gubbi-cloud PAT is missing --------------------------
+      # Without this guard, actions/checkout below silently degrades to an
+      # unauthenticated request when the PAT is unset and 404s on the private
+      # gubbi-cloud repo with a generic error. Explicit guard fails fast with
+      # an actionable message pointing the operator at the secret config.
+      - name: Verify GUBBI_CLOUD_PAT is configured
+        if: matrix.cloud
+        env:
+          GUBBI_CLOUD_PAT: ${{ secrets.GUBBI_CLOUD_PAT }}
         run: |
-          echo "::warning::GUBBI_CLOUD_PAT secret is not set -- gubbi-cloud validation will be skipped."
-          echo "Create GUBBI_CLOUD_PAT in repository Settings > Secrets (PAT with repo scope)."
+          if [ -z "${GUBBI_CLOUD_PAT:-}" ]; then
+            echo "ERROR: secrets.GUBBI_CLOUD_PAT is unset or empty." >&2
+            echo "This PAT is required to clone the private meepolabs/gubbi-cloud repo for cross-repo validation." >&2
+            echo "Configure it under GitHub repo / org Settings -> Secrets and variables -> Actions." >&2
+            exit 1
+          fi
 
       # -- Checkout downstream repo -------------------------------------------
       - name: Checkout ${{ matrix.repo }}
-        if: (!matrix.cloud || env.GUBBI_CLOUD_PAT != '')
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           repository: meepolabs/${{ matrix.repo }}
           ref: main
           path: ${{ matrix.repo }}
-          # gubbi-cloud is private; authenticate with the PAT.
-          token: ${{ secrets.GUBBI_CLOUD_PAT || '' }}
+          # gubbi-cloud is private; authenticate with the PAT. Guarded above.
+          token: ${{ secrets.GUBBI_CLOUD_PAT }}
           persist-credentials: false
 
       # -- Override gubbi-common git-pin to local path ------------------------
