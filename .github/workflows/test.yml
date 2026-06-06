@@ -102,7 +102,14 @@ jobs:
         if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
         run: poetry install --no-interaction --extras db
 
+      # INTEGRATION=1 un-skips the tests under tests/integration (audit dedup +
+      # schema drift). They use testcontainers to spin their own
+      # pgvector/pgvector:pg16 Postgres via the runner's Docker daemon -- they
+      # do NOT connect to the `postgres` service above. The service + DATABASE_URL
+      # are retained as a belt-and-braces fallback for any future test that reads
+      # DATABASE_URL directly.
       - name: Run pytest
         env:
+          INTEGRATION: "1"
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_gubbi
         run: poetry run pytest tests/ -x --cov=gubbi_common --cov-report=term-missing

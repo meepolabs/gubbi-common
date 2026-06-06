@@ -42,19 +42,6 @@ jobs:
             cloud: false
           - repo: gubbi-cloud
             cloud: true
-    services:
-      postgres:
-        image: pgvector/pgvector:pg17
-        ports: ["5432:5432"]
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: test_${{ matrix.repo }}
-        options: >-
-          --health-cmd "pg_isready -U postgres"
-          --health-interval 5s
-          --health-timeout 3s
-          --health-retries 8
 
     steps:
       # Both repos must live inside $GITHUB_WORKSPACE: actions/checkout@v4
@@ -151,16 +138,11 @@ jobs:
         run: poetry install --no-interaction
 
       # -- Run tests ----------------------------------------------------------
-      # gubbi: full suite minus integration (postgres service is provisioned
-      # for any future expansion that re-enables integration tests here).
+      # gubbi: full suite minus integration. The integration tests are excluded
+      # here, so no Postgres service is needed for this contract gate.
       - name: Run gubbi tests
         if: '!matrix.cloud'
         working-directory: ${{ matrix.repo }}
-        env:
-          POSTGRES_HOST: localhost
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: test_${{ matrix.repo }}
         run: poetry run pytest tests/ -x --ignore=tests/integration
 
       # gubbi-cloud: narrow unit-only gate for now (start narrow; expand later).
