@@ -97,7 +97,11 @@ class Action(StrEnum):
     ENTRY_CREATED = "entry.created"
     ENTRY_UPDATED = "entry.updated"
     ENTRY_DELETED = "entry.deleted"
+    ENTRY_MOVED = "entry.moved"
     TOPIC_CREATED = "topic.created"
+    TOPIC_RENAMED = "topic.renamed"
+    TOPIC_MERGED = "topic.merged"
+    TOPIC_DELETED = "topic.deleted"
     CONVERSATION_SAVED = "conversation.saved"
     # Emitted by the extraction worker when a conversation finishes
     # processing (entries created, tags applied, processed_at stamped).
@@ -192,5 +196,13 @@ _GUBBI_REFERENCED: frozenset[str] = frozenset(
         "identity.created",  # gubbi/users/bootstrap.py
         "identity.deleted",  # gubbi/audit.py
         "topic.created",  # gubbi/core/audit_decorator.py (ACTION_TOPIC_CREATED)
+        # --- Journal-domain actions defined here, not yet wired in gubbi ---
+        # Drift-guard accepts these as gubbi-domain values whose wiring is in
+        # flight or planned. Promote a comment to "wired in <file>" when each
+        # lands; demote / remove if a planned action is dropped.
+        "entry.moved",  # planned gubbi topic/entry management surface
+        "topic.renamed",  # planned gubbi topic/entry management surface
+        "topic.merged",  # planned gubbi topic/entry management surface
+        "topic.deleted",  # planned gubbi topic/entry management surface
     }
 )

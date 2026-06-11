@@ -19,10 +19,14 @@ from gubbi_common.auth.hydra import (
     TokenClaims,
 )
 from gubbi_common.auth.prm import PRMUrlError, build_prm_metadata_url
+from gubbi_common.auth.scopes import COOKIE_MODE_SCOPES, SCOPE_READ, SCOPE_WRITE
 
 __all__ = [
+    "COOKIE_MODE_SCOPES",
     "GATEWAY_CONTRACT_VERSION",
     "MAX_SKEW_SECONDS",
+    "SCOPE_READ",
+    "SCOPE_WRITE",
     "FutureSignatureError",
     "HydraError",
     "HydraInvalidToken",

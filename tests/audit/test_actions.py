@@ -83,6 +83,20 @@ def test_journal_content_values_present() -> None:
 
 
 @pytest.mark.unit
+def test_journal_topic_management_values_present() -> None:
+    """Topic / entry management Action members.
+
+    These land in the enum ahead of the consumer rewires so the
+    SHA-pin promotes them before gubbi's topic/entry management
+    handlers reference them.
+    """
+    assert Action.TOPIC_RENAMED == "topic.renamed"
+    assert Action.TOPIC_MERGED == "topic.merged"
+    assert Action.TOPIC_DELETED == "topic.deleted"
+    assert Action.ENTRY_MOVED == "entry.moved"
+
+
+@pytest.mark.unit
 def test_privileged_op_values_present() -> None:
     assert Action.SECRET_ROTATED == "secret.rotated"
     assert Action.ADMIN_QUERY_EXECUTED == "admin.query_executed"
@@ -187,9 +201,9 @@ def test_action_iterable_count_guard() -> None:
     Action is intentionally added or removed (with a registry update).
     """
     members = list(Action)
-    assert len(members) == 34, (
+    assert len(members) == 38, (
         f"unexpected Action member count: {len(members)} "
-        "(expected exactly 34; update this guard when intentionally adding/removing an Action)"
+        "(expected exactly 38; update this guard when intentionally adding/removing an Action)"
     )
 
 

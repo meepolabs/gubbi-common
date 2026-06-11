@@ -7,6 +7,33 @@ tag if they don't need the new surface. See
 release-tagging policy: not every commit gets a tag; tags mark stable
 adoption points.
 
+## 0.16.0 -- 2026-06-11
+
+### Added
+
+- `gubbi_common.auth.scopes`: canonical journal scope vocabulary --
+  `SCOPE_READ` (`"journal:read"`), `SCOPE_WRITE` (`"journal:write"`), and
+  `COOKIE_MODE_SCOPES` (the space-delimited read+write string the gateway
+  asserts for cookie-session requests). Re-exported from
+  `gubbi_common.auth`. Single source of truth so the gateway's
+  cookie-session scope assertion and gubbi's scope grants cannot fork.
+- `gubbi_common.audit.actions.Action`: four journal topic/entry
+  management members -- `TOPIC_RENAMED` (`"topic.renamed"`),
+  `TOPIC_MERGED` (`"topic.merged"`), `TOPIC_DELETED` (`"topic.deleted"`),
+  and `ENTRY_MOVED` (`"entry.moved"`). Defined ahead of their consumer
+  wiring; registered in `_GUBBI_REFERENCED` as not-yet-wired.
+
+### Consumer impact
+
+Additive. New dependency-free module under `gubbi_common.auth`; existing
+exports are unchanged. New `Action` members extend the frozen wire-string
+contract without reordering or renaming existing members; they stay
+dormant until consumers reference them. No new
+`check_gubbi_common_purity.py` ALLOW entries (the scopes module imports
+no third-party packages).
+
+---
+
 ## 0.15.0 -- 2026-05-29
 
 ### Removed
