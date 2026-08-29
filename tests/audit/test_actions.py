@@ -149,9 +149,9 @@ def test_all_action_values_referenced_by_consumers() -> None:
     missing: list[str] = []
     for member in Action:
         value = member.value
-        assert isinstance(
-            value, str
-        ), f"Action.{member.name} must be a string, got {type(value).__name__}"
+        assert isinstance(value, str), (
+            f"Action.{member.name} must be a string, got {type(value).__name__}"
+        )
         if value not in referenced:
             missing.append(f"{member.name}={value!r}")
 

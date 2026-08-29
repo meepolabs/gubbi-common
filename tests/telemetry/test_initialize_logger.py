@@ -113,9 +113,9 @@ async def test_initialize_logger_logger_name_present_in_log(tmp_path: Path) -> N
     last_line = log_file.read_text(encoding="utf-8").strip().splitlines()[-1]
     parsed = json.loads(last_line)
 
-    assert (
-        parsed.get("logger") == "unique_logger_x"
-    ), f"expected logger='unique_logger_x' in {parsed}"
+    assert parsed.get("logger") == "unique_logger_x", (
+        f"expected logger='unique_logger_x' in {parsed}"
+    )
 
 
 def test_otel_context_processor_adds_correlation_id() -> None:
@@ -141,9 +141,9 @@ def test_otel_context_processor_adds_correlation_id() -> None:
             assert result["correlation_id"] == "abc"
 
             # trace/span_id should NOT be present since span is invalid
-            assert (
-                "trace_id" not in result or result.get("trace_id") is None
-            ), f"unexpected trace_id with invalid span: {result}"
+            assert "trace_id" not in result or result.get("trace_id") is None, (
+                f"unexpected trace_id with invalid span: {result}"
+            )
         finally:
             from gubbi_common.telemetry.logging import (
                 _correlation_id_var,

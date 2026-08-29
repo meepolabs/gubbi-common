@@ -45,6 +45,5 @@ def test_pyproject_init_changelog_versions_agree() -> None:
     pkg = gubbi_common.__version__
     changelog = _changelog_top_version()
     assert pyproject == pkg == changelog, (
-        f"version drift -- pyproject.toml={pyproject!r} "
-        f"__version__={pkg!r} CHANGELOG={changelog!r}"
+        f"version drift -- pyproject.toml={pyproject!r} __version__={pkg!r} CHANGELOG={changelog!r}"
     )

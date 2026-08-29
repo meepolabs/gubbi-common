@@ -119,9 +119,9 @@ async def test_readonly_sets_transaction_read_only_before_gucs() -> None:
     sqls = [c.args[0] for c in conn.execute.call_args_list]
     assert sqls, "expected at least one execute call"
     # First call must be the read-only declaration.
-    assert (
-        sqls[0] == "SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY"
-    ), f"expected read-only declaration first, got {sqls[0]!r}"
+    assert sqls[0] == "SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY", (
+        f"expected read-only declaration first, got {sqls[0]!r}"
+    )
     # And it precedes the user-id set_config.
     user_id_idx = next(i for i, s in enumerate(sqls) if "app.current_user_id" in s)
     read_only_idx = sqls.index("SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY")

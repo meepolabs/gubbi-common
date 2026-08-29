@@ -133,9 +133,9 @@ class TestConfigureOtelEnabled:
         """After configure_otel(..., enabled=True), the global tracer provider
         has at least one BatchSpanProcessor."""
         result = _run_in_subprocess(_ENABLED_SCRIPT)
-        assert (
-            result.returncode == 0
-        ), f"child failed\nstdout={result.stdout}\nstderr={result.stderr}"
+        assert result.returncode == 0, (
+            f"child failed\nstdout={result.stdout}\nstderr={result.stderr}"
+        )
         count = int(result.stdout.strip())
         assert count >= 1
 
@@ -145,9 +145,9 @@ class TestConfigureOtelDisabled:
         """After configure_otel(..., enabled=False), the global tracer provider
         has no span processors (zero IO sink)."""
         result = _run_in_subprocess(_DISABLED_SCRIPT)
-        assert (
-            result.returncode == 0
-        ), f"child failed\nstdout={result.stdout}\nstderr={result.stderr}"
+        assert result.returncode == 0, (
+            f"child failed\nstdout={result.stdout}\nstderr={result.stderr}"
+        )
         count = int(result.stdout.strip())
         assert count == 0
 
@@ -157,9 +157,9 @@ class TestOtelResourceAttributesEnvParsed:
         """When OTEL_RESOURCE_ATTRIBUTES='env=prod,team=foo' is set, the
         Resource attributes include those keys plus service.name."""
         result = _run_in_subprocess(_ATTRS_SCRIPT)
-        assert (
-            result.returncode == 0
-        ), f"child failed\nstdout={result.stdout}\nstderr={result.stderr}"
+        assert result.returncode == 0, (
+            f"child failed\nstdout={result.stdout}\nstderr={result.stderr}"
+        )
         lines = [line.strip() for line in result.stdout.strip().splitlines()]
         assert len(lines) >= 3
         assert lines[0] == "attr-svc"  # service.name
@@ -172,9 +172,9 @@ class TestGetTracer:
         """After configure_otel(...), get_tracer() returns the tracer that was
         installed by configure_otel."""
         result = _run_in_subprocess(_TRACER_SCRIPT)
-        assert (
-            result.returncode == 0
-        ), f"child failed\nstdout={result.stdout}\nstderr={result.stderr}"
+        assert result.returncode == 0, (
+            f"child failed\nstdout={result.stdout}\nstderr={result.stderr}"
+        )
         lines = [line.strip() for line in result.stdout.strip().splitlines()]
         assert lines[0] == "True"  # configured is returned
         assert lines[1] == "True"  # not None
@@ -190,9 +190,9 @@ class TestServiceVersionAndDeploymentEnv:
         defaults from configure_otel kwargs win.
         """
         result = _run_in_subprocess(_VERSION_ENV_DEFAULT_SCRIPT)
-        assert (
-            result.returncode == 0
-        ), f"child failed\nstdout={result.stdout}\nstderr={result.stderr}"
+        assert result.returncode == 0, (
+            f"child failed\nstdout={result.stdout}\nstderr={result.stderr}"
+        )
         lines = [line.strip() for line in result.stdout.strip().splitlines()]
         assert len(lines) >= 3
         assert lines[0] == "ver-svc"
@@ -206,9 +206,9 @@ class TestServiceVersionAndDeploymentEnv:
         Custom attrs from env are preserved alongside.
         """
         result = _run_in_subprocess(_VERSION_ENV_OVERRIDE_SCRIPT)
-        assert (
-            result.returncode == 0
-        ), f"child failed\nstdout={result.stdout}\nstderr={result.stderr}"
+        assert result.returncode == 0, (
+            f"child failed\nstdout={result.stdout}\nstderr={result.stderr}"
+        )
         lines = [line.strip() for line in result.stdout.strip().splitlines()]
         assert len(lines) >= 4
         assert lines[0] == "override-svc"
@@ -220,9 +220,9 @@ class TestServiceVersionAndDeploymentEnv:
         """Call sites with no kwargs and no OTEL_RESOURCE_ATTRIBUTES get
         only ``service.name`` -- backward-compatible default."""
         result = _run_in_subprocess(_NO_VERSION_KWARGS_SCRIPT)
-        assert (
-            result.returncode == 0
-        ), f"child failed\nstdout={result.stdout}\nstderr={result.stderr}"
+        assert result.returncode == 0, (
+            f"child failed\nstdout={result.stdout}\nstderr={result.stderr}"
+        )
         lines = [line.strip() for line in result.stdout.strip().splitlines()]
         assert len(lines) >= 3
         assert lines[0] == "legacy-svc"

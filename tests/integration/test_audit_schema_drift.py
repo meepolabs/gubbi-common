@@ -170,7 +170,7 @@ async def test_dedup_unique_index_column_composition(pg_pool: asyncpg.Pool) -> N
         )
         rendered = [row["rendered"] for row in rows]
         assert len(rendered) == 5, (
-            f"audit_log_content_hash_uidx has {len(rendered)} columns, " f"expected 5: {rendered}"
+            f"audit_log_content_hash_uidx has {len(rendered)} columns, expected 5: {rendered}"
         )
 
         # First four are plain columns -- exact match.
@@ -193,16 +193,16 @@ async def test_dedup_unique_index_column_composition(pg_pool: asyncpg.Pool) -> N
             """
         )
         assert predicate is not None, "audit_log_content_hash_uidx is no longer a partial index"
-        assert (
-            "content_hash" in predicate
-        ), f"partial predicate dropped 'content_hash' reference: {predicate!r}"
+        assert "content_hash" in predicate, (
+            f"partial predicate dropped 'content_hash' reference: {predicate!r}"
+        )
         # The jsonb key-exists operator ``?`` is the contract; a swap to
         # e.g. ``metadata->>'content_hash' IS NOT NULL`` would still
         # satisfy a substring check on 'content_hash' but change index
         # semantics. Pin the operator explicitly.
-        assert (
-            " ? " in predicate or "metadata ? " in predicate
-        ), f"partial predicate operator drifted from jsonb '?': {predicate!r}"
+        assert " ? " in predicate or "metadata ? " in predicate, (
+            f"partial predicate operator drifted from jsonb '?': {predicate!r}"
+        )
 
 
 # ---------------------------------------------------------------------------

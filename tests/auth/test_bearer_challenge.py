@@ -28,7 +28,7 @@ def test_invalid_token_path_includes_error() -> None:
         resource_metadata_url="/.well-known/oauth-protected-resource",
     )
     assert out == (
-        'Bearer error="invalid_token", ' 'resource_metadata="/.well-known/oauth-protected-resource"'
+        'Bearer error="invalid_token", resource_metadata="/.well-known/oauth-protected-resource"'
     )
 
 

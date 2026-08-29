@@ -98,9 +98,9 @@ def test_default_mode_gubbi_shape() -> None:
         "span_id",
         "event",
     }
-    assert required_keys.issubset(
-        parsed.keys()
-    ), f"missing keys: {required_keys - set(parsed.keys())}"
+    assert required_keys.issubset(parsed.keys()), (
+        f"missing keys: {required_keys - set(parsed.keys())}"
+    )
 
     # attributes present and contains the extra field
     assert "attributes" in parsed
@@ -215,9 +215,9 @@ def test_correlation_from_record_attr_overrides_contextvar() -> None:
         record.correlation_id = "rec-456"
         output = formatter.format(record)
         parsed = parse_line(output)
-        assert (
-            parsed["correlation_id"] == "rec-456"
-        ), "record attribute must override contextvar fallback"
+        assert parsed["correlation_id"] == "rec-456", (
+            "record attribute must override contextvar fallback"
+        )
     finally:
         _reset_correlation()
 

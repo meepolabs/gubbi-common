@@ -69,12 +69,12 @@ def test_safe_instrument_swallows_failure_and_logs_warning(
     # even though operators grepping "instrumentor" miss it. The AND-form
     # forces a real space-separated rendering.
     assert "HTTPX" in msg, f"warning must name 'HTTPX'; got {msg!r}"
-    assert (
-        "instrumentor" in msg.lower()
-    ), f"warning must include the word 'instrumentor' (lowercased); got {msg!r}"
-    assert (
-        "instrumentor went bang" in msg
-    ), f"warning must include the original exception text; got {msg!r}"
+    assert "instrumentor" in msg.lower(), (
+        f"warning must include the word 'instrumentor' (lowercased); got {msg!r}"
+    )
+    assert "instrumentor went bang" in msg, (
+        f"warning must include the original exception text; got {msg!r}"
+    )
 
 
 @pytest.mark.unit

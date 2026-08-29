@@ -114,7 +114,7 @@ def _validate_inputs(
         )
     if pool_acquire_timeout_seconds <= 0:
         raise ValueError(
-            "pool_acquire_timeout_seconds must be positive, " f"got {pool_acquire_timeout_seconds}"
+            f"pool_acquire_timeout_seconds must be positive, got {pool_acquire_timeout_seconds}"
         )
     return hnsw_ef_search, float(pool_acquire_timeout_seconds)
 

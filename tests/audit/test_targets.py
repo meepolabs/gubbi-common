@@ -78,9 +78,9 @@ def test_all_target_kind_values_referenced_by_consumers() -> None:
     referenced = _CLOUD_TARGET_KINDS | _GUBBI_TARGET_KINDS
     missing: list[str] = []
     for member in TargetKind:
-        assert isinstance(
-            member.value, str
-        ), f"TargetKind.{member.name} must be a string, got {type(member.value).__name__}"
+        assert isinstance(member.value, str), (
+            f"TargetKind.{member.name} must be a string, got {type(member.value).__name__}"
+        )
         if member not in referenced:
             missing.append(f"{member.name}={member.value!r}")
 
