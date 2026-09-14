@@ -53,6 +53,11 @@ class TargetKind(StrEnum):
     SUBSCRIPTION = "subscription"
     OAUTH_CLIENT = "oauth_client"
 
+    # ---------------------------------------------------------------
+    # Session kinds (planned, gubbi-cloud revocation/audit service)
+    # ---------------------------------------------------------------
+    SESSION = "session"
+
     def __str__(self) -> str:
         # Lock 3.11 / 3.12 parity: without this override, 3.11's StrEnum
         # __str__ returns "TargetKind.ENTRY" while 3.12's returns
@@ -96,5 +101,6 @@ _CLOUD_TARGET_KINDS: Final[frozenset[TargetKind]] = frozenset(
         TargetKind.USER,  # gubbi-cloud/gubbi_cloud/webhooks/kratos/handlers/identity_updated.py
         TargetKind.TENANT,  # gubbi-cloud/gubbi_cloud/services/admin/llm_budget.py
         TargetKind.OAUTH_CLIENT,  # gubbi-cloud/gubbi_cloud/admin/test_cleanup.py
+        TargetKind.SESSION,  # planned cloud session revocation/audit service
     }
 )

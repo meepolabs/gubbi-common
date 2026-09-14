@@ -110,6 +110,11 @@ def test_admin_cleanup_values_present() -> None:
 
 
 @pytest.mark.unit
+def test_session_lifecycle_values_present() -> None:
+    assert Action.SESSION_REVOKED == "session.revoked"
+
+
+@pytest.mark.unit
 def test_action_values_are_strings_not_enum_members() -> None:
     """Action values are plain strings (asyncpg-friendly, no .value attribute)."""
     assert isinstance(Action.IDENTITY_CREATED, str)
@@ -201,9 +206,9 @@ def test_action_iterable_count_guard() -> None:
     Action is intentionally added or removed (with a registry update).
     """
     members = list(Action)
-    assert len(members) == 38, (
+    assert len(members) == 39, (
         f"unexpected Action member count: {len(members)} "
-        "(expected exactly 38; update this guard when intentionally adding/removing an Action)"
+        "(expected exactly 39; update this guard when intentionally adding/removing an Action)"
     )
 
 

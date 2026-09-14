@@ -7,6 +7,29 @@ tag if they don't need the new surface. See
 release-tagging policy: not every commit gets a tag; tags mark stable
 adoption points.
 
+## 0.16.1 -- 2026-09-01
+
+### Added
+
+- `gubbi_common.audit.actions.Action.SESSION_REVOKED`
+  (`"session.revoked"`): emitted once the authoritative session store
+  has removed a session, so audit can never claim a session ended
+  before the mutation that actually ends it.
+- `gubbi_common.audit.targets.TargetKind.SESSION` (`"session"`): the
+  target-kind discriminator for session-revocation audit rows.
+
+Both members are defined ahead of their consumer wiring; registered as
+not-yet-wired in `_CLOUD_REFERENCED` / `_CLOUD_TARGET_KINDS`.
+
+### Consumer impact
+
+Additive. New enum members extend the frozen wire-string contract
+without reordering or renaming existing members; they stay dormant
+until the cloud-side session revocation/audit service references
+them.
+
+---
+
 ## 0.16.0 -- 2026-06-11
 
 ### Added

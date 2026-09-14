@@ -123,6 +123,14 @@ class Action(StrEnum):
     USER_DELETED = "user.deleted"
     CLIENT_DELETED = "client.deleted"
 
+    # ---------------------------------------------------------------
+    # Session lifecycle
+    # ---------------------------------------------------------------
+    # Emitted once the authoritative session store has removed the
+    # session -- never before, so audit can't claim a session ended
+    # ahead of the mutation that actually ends it.
+    SESSION_REVOKED = "session.revoked"
+
     def __str__(self) -> str:
         # Lock 3.11 / 3.12 parity: without this override, 3.11's StrEnum
         # __str__ returns "Action.LOGIN_FAILED" while 3.12's returns
@@ -171,6 +179,7 @@ _CLOUD_REFERENCED: frozenset[str] = frozenset(
         "tenant.orphaned",  # in flight via tenant-audit task (kratos.py)
         "tenant.reactivated",  # planned cloud tenant lifecycle
         "tenant.suspended",  # planned cloud tenant lifecycle
+        "session.revoked",  # planned cloud session revocation/audit service
         # Stripe handlers (defined here in v0.10.0; wired in
         # cloud-api once the SHA-pin lands).
         "checkout.session.expired",  # webhooks/stripe/handlers/checkout_expired.py

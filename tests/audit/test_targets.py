@@ -39,6 +39,11 @@ def test_identity_billing_kinds_present() -> None:
 
 
 @pytest.mark.unit
+def test_session_kind_present() -> None:
+    assert TargetKind.SESSION == "session"
+
+
+@pytest.mark.unit
 def test_target_kind_values_are_strings() -> None:
     """TargetKind values are plain strings (asyncpg-friendly)."""
     assert isinstance(TargetKind.ENTRY, str)
