@@ -57,6 +57,32 @@ def test_deduped_insert_has_on_conflict_do_nothing() -> None:
     assert "RETURNING 1" in AUDIT_INSERT_DEDUPED_SQL
 
 
+@pytest.mark.unit
+def test_deduped_insert_has_nine_placeholders() -> None:
+    # Arrange
+    placeholders = [f"${n}" for n in range(1, 10)]
+
+    # Act / Assert: every $1..$9 referenced exactly once; no $10.
+    for ph in placeholders:
+        assert ph in AUDIT_INSERT_DEDUPED_SQL, f"missing placeholder {ph}"
+    assert "$10" not in AUDIT_INSERT_DEDUPED_SQL
+
+
+@pytest.mark.unit
+def test_deduped_insert_includes_ip_and_user_agent_columns() -> None:
+    assert "ip_address" in AUDIT_INSERT_DEDUPED_SQL
+    assert "user_agent" in AUDIT_INSERT_DEDUPED_SQL
+    assert "::inet" in AUDIT_INSERT_DEDUPED_SQL
+
+
+@pytest.mark.unit
+def test_deduped_insert_on_conflict_key_excludes_ip_and_user_agent() -> None:
+    """The dedup key stays the original 4-tuple; IP/UA are trailing metadata."""
+    conflict_clause = AUDIT_INSERT_DEDUPED_SQL.split("ON CONFLICT", 1)[1].split("DO NOTHING", 1)[0]
+    assert "ip_address" not in conflict_clause
+    assert "user_agent" not in conflict_clause
+
+
 # ---------------------------------------------------------------------------
 # VALID_ACTOR_TYPES
 # ---------------------------------------------------------------------------
@@ -778,7 +804,7 @@ async def test_record_audit_deduped_async_writes_deduped_sql() -> None:
     """The dedup writer must route through AUDIT_INSERT_DEDUPED_SQL.
 
     Layout: (sql, actor_type, actor_id, action, target_kind, target_type,
-    target_id, metadata_json).
+    target_id, metadata_json, ip_address, user_agent).
     """
     conn = _StubFetchvalConn(fetchval_returns=1)
     inserted = await record_audit_deduped_async(
@@ -802,6 +828,86 @@ async def test_record_audit_deduped_async_writes_deduped_sql() -> None:
     assert args[4] == "subscription"
     assert args[5] == "sub_abc"
     assert json.loads(args[6]) == {"content_hash": "abc123"}
+    assert len(args) == 9
+    assert args[7] is None
+    assert args[8] is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_record_audit_deduped_async_omitted_metadata_kwargs_persist_null() -> None:
+    """Existing callers that omit ip_address/user_agent keep NULL in both slots."""
+    conn = _StubFetchvalConn(fetchval_returns=1)
+    await record_audit_deduped_async(
+        conn,  # type: ignore[arg-type]
+        actor_type="system",
+        actor_id="system:stripe_webhook",
+        action="subscription.created",
+        target_kind=TargetKind.SUBSCRIPTION,
+        target_id="sub_abc",
+        metadata={"content_hash": "abc123"},
+    )
+    _, *args = conn.calls[0]
+    assert args[7] is None
+    assert args[8] is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_record_audit_deduped_async_normalizes_supplied_ip() -> None:
+    """A supplied ip_address is normalized via the canonical helper."""
+    conn = _StubFetchvalConn(fetchval_returns=1)
+    await record_audit_deduped_async(
+        conn,  # type: ignore[arg-type]
+        actor_type="system",
+        actor_id="system:stripe_webhook",
+        action="subscription.created",
+        target_kind=TargetKind.SUBSCRIPTION,
+        target_id="sub_abc",
+        metadata={"content_hash": "abc123"},
+        ip_address="::ffff:127.0.0.1",
+    )
+    _, *args = conn.calls[0]
+    assert args[7] == "127.0.0.1"
+
+
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_record_audit_deduped_async_passes_user_agent_through() -> None:
+    """A supplied user_agent is persisted verbatim in the trailing column."""
+    conn = _StubFetchvalConn(fetchval_returns=1)
+    await record_audit_deduped_async(
+        conn,  # type: ignore[arg-type]
+        actor_type="system",
+        actor_id="system:stripe_webhook",
+        action="subscription.created",
+        target_kind=TargetKind.SUBSCRIPTION,
+        target_id="sub_abc",
+        metadata={"content_hash": "abc123"},
+        user_agent="Mozilla/5.0 test-agent",
+    )
+    _, *args = conn.calls[0]
+    assert args[8] == "Mozilla/5.0 test-agent"
+
+
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_record_audit_deduped_async_rejects_malformed_ip() -> None:
+    """Invalid ip_address raises before the INSERT executes -- same
+    validation surface as the canonical writer."""
+    conn = _StubFetchvalConn()
+    with pytest.raises(ValueError, match="invalid ip_address"):
+        await record_audit_deduped_async(
+            conn,  # type: ignore[arg-type]
+            actor_type="system",
+            actor_id="system:stripe_webhook",
+            action="subscription.created",
+            target_kind=TargetKind.SUBSCRIPTION,
+            target_id="sub_abc",
+            metadata={"content_hash": "abc123"},
+            ip_address="not-an-ip",
+        )
+    assert conn.calls == []
 
 
 @pytest.mark.asyncio

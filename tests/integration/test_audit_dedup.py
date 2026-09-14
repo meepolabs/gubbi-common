@@ -29,7 +29,7 @@ import pytest
 import pytest_asyncio
 
 from gubbi_common.audit import TargetKind
-from gubbi_common.audit.sql import AUDIT_INSERT_DEDUPED_SQL
+from gubbi_common.audit.sql import AUDIT_INSERT_DEDUPED_SQL, record_audit_deduped_async
 
 if TYPE_CHECKING:
     import asyncpg
@@ -67,6 +67,8 @@ async def test_dedup_insert_inserts_first_row(pg_pool: asyncpg.Pool) -> None:
             "user",
             "00000000-0000-0000-0000-000000000001",
             json.dumps({"content_hash": "abc"}),
+            None,
+            None,
         )
         assert result == 1
 
@@ -86,6 +88,8 @@ async def test_dedup_insert_blocks_duplicate_content_hash(
             "user",
             "00000000-0000-0000-0000-000000000002",
             json.dumps({"content_hash": "dup"}),
+            None,
+            None,
         )
         assert first == 1
 
@@ -103,6 +107,8 @@ async def test_dedup_insert_blocks_duplicate_content_hash(
             "user",
             "00000000-0000-0000-0000-000000000002",
             json.dumps({"content_hash": "dup"}),
+            None,
+            None,
         )
         assert second is None
 
@@ -122,6 +128,8 @@ async def test_dedup_insert_allows_different_content_hash(
             "user",
             "00000000-0000-0000-0000-000000000003",
             json.dumps({"content_hash": "h1"}),
+            None,
+            None,
         )
         second = await conn.fetchval(
             AUDIT_INSERT_DEDUPED_SQL,
@@ -132,6 +140,8 @@ async def test_dedup_insert_allows_different_content_hash(
             "user",
             "00000000-0000-0000-0000-000000000003",
             json.dumps({"content_hash": "h2"}),
+            None,
+            None,
         )
         assert first == 1
         assert second == 1
@@ -154,6 +164,8 @@ async def test_dedup_insert_no_content_hash_does_not_dedup(
             "user",
             "00000000-0000-0000-0000-000000000004",
             json.dumps({"other": "value"}),
+            None,
+            None,
         )
         second = await conn.fetchval(
             AUDIT_INSERT_DEDUPED_SQL,
@@ -164,6 +176,8 @@ async def test_dedup_insert_no_content_hash_does_not_dedup(
             "user",
             "00000000-0000-0000-0000-000000000004",
             json.dumps({"other": "value"}),
+            None,
+            None,
         )
         assert first == 1
         assert second == 1
@@ -198,6 +212,8 @@ async def test_dedup_distinguishes_target_kinds(pg_pool: asyncpg.Pool) -> None:
             "kratos_identity",  # $5 target_type (deliberately != target_kind value)
             "dup-id",
             json.dumps({"content_hash": "x"}),
+            None,
+            None,
         )
         assert first == 1
 
@@ -215,6 +231,8 @@ async def test_dedup_distinguishes_target_kinds(pg_pool: asyncpg.Pool) -> None:
             "stripe_subscription",  # $5 target_type (deliberately != target_kind value)
             "dup-id",
             json.dumps({"content_hash": "x"}),
+            None,
+            None,
         )
         assert second == 1
 
@@ -263,6 +281,8 @@ async def test_dedup_allows_cross_actor(pg_pool: asyncpg.Pool) -> None:
             "user",
             "00000000-0000-0000-0000-000000000005",
             json.dumps({"content_hash": "shared"}),
+            None,
+            None,
         )
         assert first == 1
 
@@ -279,6 +299,8 @@ async def test_dedup_allows_cross_actor(pg_pool: asyncpg.Pool) -> None:
             "user",
             "00000000-0000-0000-0000-000000000005",
             json.dumps({"content_hash": "shared"}),
+            None,
+            None,
         )
         assert second == 1
 
@@ -299,6 +321,57 @@ async def test_dedup_allows_cross_actor(pg_pool: asyncpg.Pool) -> None:
         )
         actor_ids = [row["actor_id"] for row in rows]
         assert actor_ids == ["system:worker_one", "system:worker_two"]
+
+
+@pytest.mark.asyncio(loop_scope="session")
+@pytest.mark.usefixtures("_audit_log_clean")
+async def test_record_audit_deduped_async_persists_ip_and_user_agent(
+    pg_pool: asyncpg.Pool,
+) -> None:
+    """Supplied ip_address/user_agent land on the row; a retry with the
+    same content_hash still dedups to a single row."""
+    async with pg_pool.acquire() as conn:
+        first = await record_audit_deduped_async(
+            conn,
+            actor_type="system",
+            actor_id="system:worker",
+            action="identity.updated",
+            target_kind=TargetKind.USER,
+            target_type="user",
+            target_id="00000000-0000-0000-0000-000000000006",
+            metadata={"content_hash": "meta-abc"},
+            ip_address="::ffff:127.0.0.1",
+            user_agent="Mozilla/5.0 integration-test",
+        )
+        assert first is True
+
+        retry = await record_audit_deduped_async(
+            conn,
+            actor_type="system",
+            actor_id="system:worker",
+            action="identity.updated",
+            target_kind=TargetKind.USER,
+            target_type="user",
+            target_id="00000000-0000-0000-0000-000000000006",
+            metadata={"content_hash": "meta-abc"},
+            ip_address="::ffff:127.0.0.1",
+            user_agent="Mozilla/5.0 integration-test",
+        )
+        assert retry is False
+
+        row = await conn.fetchrow(
+            "SELECT ip_address, user_agent FROM audit_log "
+            "WHERE target_id = '00000000-0000-0000-0000-000000000006'"
+        )
+        assert row is not None
+        assert str(row["ip_address"]) == "127.0.0.1"
+        assert row["user_agent"] == "Mozilla/5.0 integration-test"
+
+        count = await conn.fetchval(
+            "SELECT count(*) FROM audit_log "
+            "WHERE target_id = '00000000-0000-0000-0000-000000000006'"
+        )
+        assert count == 1
 
 
 # Sibling-repo path; ``conftest.MIGRATION_DDL_PATH`` does the resolution.

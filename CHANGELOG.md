@@ -7,6 +7,30 @@ tag if they don't need the new surface. See
 release-tagging policy: not every commit gets a tag; tags mark stable
 adoption points.
 
+## 0.16.2 -- 2026-09-01
+
+### Added
+
+- `gubbi_common.audit.sql.record_audit_deduped_async` gains optional
+  `ip_address` / `user_agent` keyword arguments. `AUDIT_INSERT_DEDUPED_SQL`
+  grows two trailing columns (`ip_address`, `user_agent`) so the dedup
+  writer can persist the same request metadata the canonical writer
+  already does, without forking raw SQL in a consumer. `ip_address` is
+  normalized via the same `_normalize_ip` helper used by
+  `record_audit_async`. Both columns already existed on `audit_log`; no
+  schema or index migration is required.
+
+### Consumer impact
+
+Additive. Both new arguments default to `None`; every existing
+positional and keyword caller keeps writing `NULL` into the two
+trailing columns exactly as before. Callers that raw-SQL against
+`AUDIT_INSERT_DEDUPED_SQL` directly (rather than through the wrapper)
+now need two trailing positional arguments (`ip_address`, `user_agent`)
+-- pass `None, None` to keep prior behavior.
+
+---
+
 ## 0.16.1 -- 2026-09-01
 
 ### Added

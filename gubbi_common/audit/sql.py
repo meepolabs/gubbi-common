@@ -7,12 +7,14 @@ helpers that own them:
   ``(actor_type, actor_id, action, target_type, target_id, target_kind,
   reason, metadata, ip_address, user_agent)``. Use via
   :func:`record_audit_async`.
-* ``AUDIT_INSERT_DEDUPED_SQL`` -- 7-column insert with ``ON CONFLICT
-  DO NOTHING`` for re-delivery dedup, keyed on
+* ``AUDIT_INSERT_DEDUPED_SQL`` -- 9-column insert (7 dedup columns
+  plus ``ip_address``/``user_agent`` request metadata) with
+  ``ON CONFLICT DO NOTHING`` for re-delivery dedup, keyed on
   ``(actor_id, target_kind, target_id, action, metadata->>'content_hash')``
   (actor_id prepended in gubbi migration 0031 to close the cross-actor
   false-collision tampering vector; webhook idempotency preserved
-  because each webhook source uses a constant actor_id).
+  because each webhook source uses a constant actor_id). The trailing
+  IP/UA columns are not part of the dedup key.
   Use via :func:`record_audit_deduped_async`.
 * ``record_audit_async`` -- canonical writer. Performs actor/target id
   validation, banned-key metadata redaction, IP normalization,
@@ -184,11 +186,19 @@ AUDIT_INSERT_SQL: str = textwrap.dedent(
 # cloud-api webhook handlers use a constant actor_id per source
 # (e.g. ``system:stripe_webhook``, ``system:kratos_webhook``), so
 # re-deliveries from the same source still dedup as before.
+#
+# ``ip_address`` / ``user_agent`` are appended (not interleaved) so
+# every existing positional caller of this constant keeps its
+# meaning unchanged; both columns already exist on ``audit_log`` and
+# accept NULL, so no migration is required to start populating them
+# here. The ``ON CONFLICT`` target is untouched -- these two columns
+# are request metadata, not part of the dedup key.
 AUDIT_INSERT_DEDUPED_SQL: str = textwrap.dedent(
     """\
     INSERT INTO audit_log
-        (actor_type, actor_id, action, target_kind, target_type, target_id, metadata)
-    VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
+        (actor_type, actor_id, action, target_kind, target_type, target_id, metadata,
+         ip_address, user_agent)
+    VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::inet, $9)
     ON CONFLICT (actor_id, target_kind, target_id, action, (metadata->>'content_hash'))
         WHERE metadata ? 'content_hash'
     DO NOTHING
@@ -590,6 +600,8 @@ async def record_audit_deduped_async(
     target_id: str | None = None,
     metadata: dict[str, Any] | None = None,
     correlation_id: str | None = None,
+    ip_address: str | None = None,
+    user_agent: str | None = None,
 ) -> bool:
     """Insert one immutable row using the dedup INSERT shape.
 
@@ -642,6 +654,22 @@ async def record_audit_deduped_async(
         under the key ``"correlation_id"`` before redaction. See
         :func:`record_audit_async` for full semantics (ContextVar
         default, caller-wins precedence, no-sentinel-for-background).
+    ip_address:
+        Optional originating IP. Validated and normalized via
+        :func:`_normalize_ip` -- the same helper the canonical writer
+        uses -- and cast to ``inet`` server-side. Defaults to ``None``
+        so every existing caller keeps writing NULL into this column.
+    user_agent:
+        Optional HTTP User-Agent string, persisted verbatim. Defaults
+        to ``None`` so every existing caller keeps writing NULL into
+        this column.
+
+    Raises
+    ------
+    ValueError
+        If ``actor_type`` is invalid, ``target_kind`` is invalid,
+        ``ip_address`` is not a valid IPv4 / IPv6 address, or the
+        post-redaction metadata exceeds ``MAX_METADATA_BYTES``.
     """
     # Routes through the same validator as the canonical writer so a
     # future tightening of actor_type / actor_id rules cannot drift
@@ -661,6 +689,7 @@ async def record_audit_deduped_async(
     # See ``record_audit_async`` for ContextVar-default rationale.
     effective_cid = correlation_id if correlation_id is not None else get_correlation_id()
     metadata_json = _prepare_metadata(metadata, correlation_id=effective_cid)
+    normalized_ip = _normalize_ip(ip_address)
 
     tracer = trace.get_tracer(_TRACER_NAME)
     start_ns = time.monotonic_ns()
@@ -695,6 +724,8 @@ async def record_audit_deduped_async(
                 target_type,
                 target_id,
                 metadata_json,
+                normalized_ip,
+                user_agent,
             )
             inserted = result is not None
             audit_success = True
