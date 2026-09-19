@@ -23,7 +23,7 @@ from __future__ import annotations
 import json
 from collections.abc import AsyncIterator
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final
 
 import pytest
 import pytest_asyncio
@@ -375,50 +375,70 @@ async def test_record_audit_deduped_async_persists_ip_and_user_agent(
 
 
 # Sibling-repo path; ``conftest.MIGRATION_DDL_PATH`` does the resolution.
-# Pins to migration 0031 (actor_id prepend) -- the migration that
-# defines the index shape ``AUDIT_INSERT_DEDUPED_SQL`` now depends on.
-# The previous 0020 glob was retained until 0031 landed; cross-checking
-# the latest migration is the contract this guard enforces.
-_GUBBI_MIGRATION_GLOB = "*0031*audit_log_dedup_actor_scope*.py"
+# The dedup index shape ``AUDIT_INSERT_DEDUPED_SQL`` depends on -- the
+# ``actor_id`` prepend -- now lives in the squashed baseline rather than
+# in a standalone ``*audit_log_dedup_actor_scope*`` revision, so the
+# search covers every revision file plus the baseline SQL the squash
+# migration executes. Globbing for the retired filename alone made this
+# guard skip on a fully present sibling checkout.
+_MIGRATION_SOURCE_GLOBS: Final[tuple[str, ...]] = ("*.py", "*.sql")
 
 
-def _gubbi_migration_path() -> Path | None:
+def _mentions_dedup_index(path: Path) -> bool:
+    return path.is_file() and "audit_log_content_hash_uidx" in path.read_text(encoding="utf-8")
+
+
+def _dedup_index_sources() -> list[Path]:
+    """Return every migration-source file that mentions the dedup index."""
     from tests.integration.conftest import MIGRATION_DDL_PATH
 
-    if not MIGRATION_DDL_PATH.exists():
-        return None
-    matches = list(MIGRATION_DDL_PATH.glob(_GUBBI_MIGRATION_GLOB))
-    return matches[0] if matches else None
+    search_roots = (MIGRATION_DDL_PATH, MIGRATION_DDL_PATH.parent)
+    matches: list[Path] = []
+    for root in search_roots:
+        if not root.is_dir():
+            continue
+        for pattern in _MIGRATION_SOURCE_GLOBS:
+            matches.extend(
+                path for path in sorted(root.glob(pattern)) if _mentions_dedup_index(path)
+            )
+    return matches
 
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_dedup_ddl_matches_gubbi_migration(pg_pool: asyncpg.Pool) -> None:
-    """Cross-check the live partial-index DDL against gubbi migration 0031.
+    """Cross-check the live partial-index DDL against the gubbi migration source.
 
-    Skips if gubbi is not checked out alongside gubbi-common (e.g. CI
-    that runs only this repo). When gubbi is present, the migration
-    string must carry the partial index name, the leading column
-    ``actor_id`` (from mig 0031), the namespace discriminator
-    ``target_kind`` (from mig 0020), and the ``content_hash`` predicate
-    that the dedup INSERT relies on.
+    Skips if gubbi is not checked out alongside gubbi-common, unless
+    ``REQUIRE_GUBBI_MIGRATIONS=1`` makes absence a failure (the CI
+    integration lane). When gubbi is present, the source that defines the
+    dedup index must carry the index name, the leading column ``actor_id``,
+    the namespace discriminator ``target_kind``, and the ``content_hash``
+    predicate the dedup INSERT relies on.
     """
-    path = _gubbi_migration_path()
-    if path is None:
-        pytest.skip("gubbi migration 0031 not present alongside gubbi-common")
+    from tests.integration.conftest import require_migration_source
 
-    text = path.read_text(encoding="utf-8")
-    # Four contract surfaces: index name, leading actor_id (mig 0031),
-    # target_kind namespace discriminator, partial predicate.
+    require_migration_source("dedup index cross-check")
+
+    sources = _dedup_index_sources()
+    assert sources, (
+        "no gubbi migration source mentions audit_log_content_hash_uidx; "
+        "the dedup index contract AUDIT_INSERT_DEDUPED_SQL depends on is gone"
+    )
+
+    text = "\n".join(path.read_text(encoding="utf-8") for path in sources)
+    named = [path.name for path in sources]
+    # Four contract surfaces: index name, leading actor_id, target_kind
+    # namespace discriminator, partial predicate.
     assert "audit_log_content_hash_uidx" in text, (
-        "gubbi migration 0031 no longer carries the dedup index name; "
+        f"gubbi migration source {named} no longer carries the dedup index name; "
         "AUDIT_INSERT_DEDUPED_SQL is broken"
     )
     assert "actor_id" in text, (
-        "gubbi migration 0031 dropped actor_id from the dedup index; "
+        f"gubbi migration source {named} dropped actor_id from the dedup index; "
         "AUDIT_INSERT_DEDUPED_SQL ON CONFLICT no longer matches"
     )
     assert "target_kind" in text, (
-        "gubbi migration 0031 dropped target_kind from the dedup index; "
+        f"gubbi migration source {named} dropped target_kind from the dedup index; "
         "AUDIT_INSERT_DEDUPED_SQL ON CONFLICT no longer matches"
     )
     assert "content_hash" in text

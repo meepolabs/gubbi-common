@@ -79,6 +79,21 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
 
+      # The audit_log fixture in tests/integration mirrors the sibling
+      # gubbi repo's migration chain, and the staleness guards compare it
+      # against the real migration source. Check that source out at an
+      # IMMUTABLE revision -- a branch name would let an unrelated sibling
+      # commit turn this lane red or, worse, green. REQUIRE_GUBBI_MIGRATIONS
+      # below makes a missing checkout fail the lane instead of skipping,
+      # so a regression in this step cannot hide.
+      - name: Check out pinned gubbi migration source
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          repository: meepolabs/gubbi
+          ref: a74ae71114d346c4118d67922e2c5e5387d9aaa8
+          path: gubbi
+          persist-credentials: false
+
       - name: Set up Python 3.12
         uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0
         with:
@@ -108,9 +123,15 @@ jobs:
       # do NOT connect to the `postgres` service above. The service + DATABASE_URL
       # are retained as a belt-and-braces fallback for any future test that reads
       # DATABASE_URL directly.
+      #
+      # REQUIRE_GUBBI_MIGRATIONS=1 turns an absent sibling checkout into a
+      # failure rather than a skip: in this lane the source is guaranteed
+      # present by the pinned checkout above, so absence means that step
+      # broke.
       - name: Run pytest
         env:
           INTEGRATION: "1"
+          REQUIRE_GUBBI_MIGRATIONS: "1"
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_gubbi
         run: poetry run pytest tests/ -x --cov=gubbi_common --cov-report=term-missing
 

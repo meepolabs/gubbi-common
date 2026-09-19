@@ -1527,4 +1527,4 @@ db = ["asyncpg"]
 [metadata]
 lock-version = "2.1"
 python-versions = "~3.12"
-content-hash = "2696ffd6aabd95c70578626ff979543c8b4561358a9a864214e4542972b62e26"
+content-hash = "8cb9414ef8d49cf4438ddea0cccea2eed24966a44e61719889be13efc4846188"

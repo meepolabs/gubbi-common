@@ -7,6 +7,44 @@ tag if they don't need the new surface. See
 release-tagging policy: not every commit gets a tag; tags mark stable
 adoption points.
 
+## 0.16.3 -- 2026-09-18
+
+### Changed
+
+- `gubbi_common.audit.sql`: both audit writers now describe a failed
+  INSERT with a sanitized `audit.write.failed` span event carrying only
+  `exception.type` (the exception class name) and, when the driver
+  supplies one with the exact five-character SQLSTATE shape,
+  `db.sqlstate`. The previous `span.record_exception(exc)` call is gone,
+  the span no longer carries an OTel `exception` event, and the error
+  status is set without a description. Driver messages, database
+  DETAIL/HINT text, and stacktraces can embed identifiers, addresses,
+  user agents, and credential-shaped values, so none of them reach
+  telemetry. The sanitization covers cancellation as well as ordinary
+  failure: `asyncio.CancelledError` is a `BaseException`, so the failure
+  block catches `BaseException` and re-raises bare, leaving cancellation
+  semantics intact. `AUDIT_WRITE_FAILED_EVENT_NAME` is exported from
+  both `gubbi_common.audit.sql` and `gubbi_common.audit` for consumers
+  that build backend queries or alerts on the event name.
+
+  Scope: this sanitizes the `audit.write` span these writers own. The
+  exception still propagates unchanged, so a caller that records it on
+  its own span or logs it reintroduces the raw text there; sanitizing
+  caller-owned telemetry stays a consumer-side change.
+
+### Consumer impact
+
+Additive plus one telemetry-shape change; no code change required.
+Exception and cancellation propagation, return values, call signatures,
+success-path SQL and parameters, dedup behavior, and the existing
+allowlisted span attributes (`event_type`, `actor_type`, `success`,
+`latency_ms`) are unchanged. Dashboards, alerts, or saved queries that
+matched the `audit.write` span's `exception` event or read
+`exception.message` / `exception.stacktrace` on it must switch to
+`audit.write.failed` with `exception.type` / `db.sqlstate`.
+
+---
+
 ## 0.16.2 -- 2026-09-01
 
 ### Added

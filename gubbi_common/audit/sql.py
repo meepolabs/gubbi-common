@@ -28,6 +28,15 @@ helpers that own them:
 * ``VALID_ACTOR_TYPES`` -- the four values the CHECK constraint on
   ``audit_log.actor_type`` accepts.
 
+Both writers describe a failed INSERT with the sanitized
+``audit.write.failed`` span event (exception class name plus a
+shape-validated SQLSTATE) rather than OTel's ``exception`` event, whose
+message and stacktrace attributes can carry driver- and
+database-supplied text from the failing statement. Cancellation is
+sanitized on the same path and re-raised bare. This covers the
+``audit.write`` span only -- the exception still propagates, so callers
+own the sanitization of their own spans and logs.
+
 Schema ownership lives in gubbi's Alembic chain. Any change to
 column names or NOT NULL constraints must update the SQL constants
 here and bump this package's major version.
@@ -56,10 +65,12 @@ from gubbi_common.telemetry.allowlist import is_banned_key, safe_set_attributes
 
 if TYPE_CHECKING:
     import asyncpg
+    from opentelemetry.trace import Span
 
 __all__ = [
     "AUDIT_INSERT_DEDUPED_SQL",
     "AUDIT_INSERT_SQL",
+    "AUDIT_WRITE_FAILED_EVENT_NAME",
     "AUDIT_WRITE_SPAN_NAME",
     "MAX_METADATA_BYTES",
     "VALID_ACTOR_TYPES",
@@ -114,6 +125,60 @@ AUDIT_WRITE_SPAN_NAME: Final[str] = "audit.write"
 # already keys on the span name (not the tracer name); cloud follows
 # the same convention.
 _TRACER_NAME: Final[str] = "gubbi_common.audit"
+
+# Name of the sanitized failure event both writers add to the
+# ``audit.write`` span instead of OTel's ``exception`` event. A distinct
+# name keeps the two apart in the backend: an ``exception`` event carries
+# the SDK's message/stacktrace attributes, this one never can.
+AUDIT_WRITE_FAILED_EVENT_NAME: Final[str] = "audit.write.failed"
+
+# SQLSTATE is exactly five characters drawn from digits and uppercase
+# ASCII letters (SQL standard, class + subclass). Anything else is not a
+# SQLSTATE and is dropped rather than forwarded: the attribute is the one
+# place a driver-supplied string reaches telemetry, so its shape is
+# validated instead of trusted.
+_SQLSTATE_LENGTH: Final[int] = 5
+_SQLSTATE_ALPHABET: Final[frozenset[str]] = frozenset("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+
+
+def _sqlstate_or_none(exc: BaseException) -> str | None:
+    """Return *exc*'s SQLSTATE when it has the exact standard shape.
+
+    asyncpg exposes ``sqlstate`` on its ``PostgresError`` subclasses.
+    Any other exception, a non-string value, or a value that is not five
+    digits / uppercase ASCII letters yields ``None``.
+    """
+    candidate = getattr(exc, "sqlstate", None)
+    if not isinstance(candidate, str) or len(candidate) != _SQLSTATE_LENGTH:
+        return None
+    if not all(char in _SQLSTATE_ALPHABET for char in candidate):
+        return None
+    return candidate
+
+
+def _record_sanitized_failure(span: Span, exc: BaseException) -> None:
+    """Mark *span* failed without letting driver-supplied text reach it.
+
+    Replaces ``span.record_exception`` on the audit-write path: the OTel
+    SDK's exception event carries ``exception.message`` and
+    ``exception.stacktrace``, and a driver message can embed the
+    session id, IP, user agent, token, or database DETAIL/HINT text of
+    the failing statement. The sanitized event carries the exception
+    class name plus a shape-validated SQLSTATE, which is enough to tell
+    a privilege rejection from a constraint violation. The error status
+    is set without a description for the same reason.
+
+    Scope: the ``audit.write`` span only. The exception propagates
+    unchanged, so a caller that records it on its own span, or logs it,
+    reintroduces the raw text on that surface -- sanitizing the caller's
+    own telemetry is the caller's responsibility.
+    """
+    attributes: dict[str, str] = {"exception.type": type(exc).__name__}
+    sqlstate = _sqlstate_or_none(exc)
+    if sqlstate is not None:
+        attributes["db.sqlstate"] = sqlstate
+    span.add_event(AUDIT_WRITE_FAILED_EVENT_NAME, attributes=attributes)
+    span.set_status(Status(StatusCode.ERROR))
 
 
 # Per-span allowlist used to filter ``audit.write`` span attributes
@@ -529,7 +594,16 @@ async def record_audit_async(
     tracer = trace.get_tracer(_TRACER_NAME)
     start_ns = time.monotonic_ns()
     audit_success = False
-    with tracer.start_as_current_span(AUDIT_WRITE_SPAN_NAME) as span:
+    # These two flags cover the ``Exception`` case only: the SDK's context
+    # exit would otherwise re-add the raw exception event and a status
+    # description built from the driver message, undoing the sanitization
+    # in ``_record_sanitized_failure``. The exception still propagates and
+    # the span still ends.
+    with tracer.start_as_current_span(
+        AUDIT_WRITE_SPAN_NAME,
+        record_exception=False,
+        set_status_on_exception=False,
+    ) as span:
         # Route through ``safe_set_attributes`` so the span attributes are
         # filtered against ``_AUDIT_WRITE_ALLOWLIST``. Curated to only the
         # bounded-enum / numeric attrs here; ``actor_id``, ``target_id``,
@@ -572,9 +646,15 @@ async def record_audit_async(
                 user_agent,
             )
             audit_success = True
-        except Exception as exc:
-            span.record_exception(exc)
-            span.set_status(Status(StatusCode.ERROR))
+        # BaseException, not Exception: the SDK's context exit ignores
+        # non-Exception raises entirely, so a cancelled write would leave
+        # this span with no failure event and no error status at all.
+        # ``asyncio.CancelledError`` derives from BaseException, and its
+        # message is caller-supplied and raised mid-statement. The bare
+        # ``raise`` preserves cancellation semantics for the surrounding
+        # task.
+        except BaseException as exc:
+            _record_sanitized_failure(span, exc)
             raise
         finally:
             latency_ms = (time.monotonic_ns() - start_ns) / _NS_PER_MS
@@ -695,7 +775,16 @@ async def record_audit_deduped_async(
     start_ns = time.monotonic_ns()
     audit_success = False
     inserted = False
-    with tracer.start_as_current_span(AUDIT_WRITE_SPAN_NAME) as span:
+    # These two flags cover the ``Exception`` case only: the SDK's context
+    # exit would otherwise re-add the raw exception event and a status
+    # description built from the driver message, undoing the sanitization
+    # in ``_record_sanitized_failure``. The exception still propagates and
+    # the span still ends.
+    with tracer.start_as_current_span(
+        AUDIT_WRITE_SPAN_NAME,
+        record_exception=False,
+        set_status_on_exception=False,
+    ) as span:
         # See ``record_audit_async`` for the rationale on routing through
         # ``safe_set_attributes`` and the curated key set. Mirrored here
         # so both writers emit the same span shape.
@@ -729,9 +818,15 @@ async def record_audit_deduped_async(
             )
             inserted = result is not None
             audit_success = True
-        except Exception as exc:
-            span.record_exception(exc)
-            span.set_status(Status(StatusCode.ERROR))
+        # BaseException, not Exception: the SDK's context exit ignores
+        # non-Exception raises entirely, so a cancelled write would leave
+        # this span with no failure event and no error status at all.
+        # ``asyncio.CancelledError`` derives from BaseException, and its
+        # message is caller-supplied and raised mid-statement. The bare
+        # ``raise`` preserves cancellation semantics for the surrounding
+        # task.
+        except BaseException as exc:
+            _record_sanitized_failure(span, exc)
             raise
         finally:
             latency_ms = (time.monotonic_ns() - start_ns) / _NS_PER_MS
