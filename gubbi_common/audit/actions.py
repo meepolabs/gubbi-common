@@ -48,6 +48,7 @@ class Action(StrEnum):
     IDENTITY_UPDATED = "identity.updated"
     IDENTITY_DELETED = "identity.deleted"
     IDENTITY_RESTORED = "identity.restored"
+    IDENTITY_PURGED = "identity.purged"
 
     # ---------------------------------------------------------------
     # Tenant lifecycle
@@ -172,7 +173,8 @@ _CLOUD_REFERENCED: frozenset[str] = frozenset(
         # flight or planned. Promote a comment to "wired in <file>" when each
         # lands; demote / remove if a planned action is dropped.
         "admin.query_executed",  # planned cloud admin endpoint
-        "identity.restored",  # planned cloud kratos webhook (un-soft-delete)
+        "identity.purged",  # planned cloud account purge (hard delete after grace)
+        "identity.restored",  # planned cloud account-deletion cancel path
         "secret.rotated",  # planned cloud secret-rotation surface
         "subscription.override",  # cloud-side deprecated alias for subscription.updated
         "tenant.deprovisioned",  # in flight via tenant-audit task (kratos.py)

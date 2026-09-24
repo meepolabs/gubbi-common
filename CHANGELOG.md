@@ -7,6 +7,29 @@ tag if they don't need the new surface. See
 release-tagging policy: not every commit gets a tag; tags mark stable
 adoption points.
 
+## 0.16.4 -- 2026-09-24
+
+### Added
+
+- `gubbi_common.audit.Action.IDENTITY_PURGED = "identity.purged"`: the
+  audit action for the irreversible purge of an account's data once its
+  deletion grace period ends. Registered as a planned cloud-side action
+  in the consumer drift registry.
+
+### Changed
+
+- The drift-registry comment for `identity.restored` now names its
+  planned surface: the cloud account-deletion cancel path, which
+  restores an account whose deletion was requested but not yet purged.
+
+### Consumer impact
+
+Optional -- adopt if you need `Action.IDENTITY_PURGED`. Additive only;
+no existing value, signature, or SQL changes. The Action member count
+grows from 39 to 40.
+
+---
+
 ## 0.16.3 -- 2026-09-18
 
 ### Changed

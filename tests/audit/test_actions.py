@@ -28,6 +28,7 @@ def test_identity_lifecycle_values_present() -> None:
     assert Action.IDENTITY_UPDATED == "identity.updated"
     assert Action.IDENTITY_DELETED == "identity.deleted"
     assert Action.IDENTITY_RESTORED == "identity.restored"
+    assert Action.IDENTITY_PURGED == "identity.purged"
 
 
 @pytest.mark.unit
@@ -206,9 +207,9 @@ def test_action_iterable_count_guard() -> None:
     Action is intentionally added or removed (with a registry update).
     """
     members = list(Action)
-    assert len(members) == 39, (
+    assert len(members) == 40, (
         f"unexpected Action member count: {len(members)} "
-        "(expected exactly 39; update this guard when intentionally adding/removing an Action)"
+        "(expected exactly 40; update this guard when intentionally adding/removing an Action)"
     )
 
 
