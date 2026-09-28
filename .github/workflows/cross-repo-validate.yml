@@ -61,7 +61,7 @@ jobs:
       - name: Install Poetry
         uses: snok/install-poetry@76e04a911780d5b312d89783f7b1cd627778900a # v1.4.1
         with:
-          version: 1.8.5
+          version: 2.4.1
           virtualenvs-create: true
           virtualenvs-in-project: false
 
@@ -127,10 +127,10 @@ jobs:
           PYEOF
 
       # -- Lock + Install -----------------------------------------------------
-      - name: poetry lock (no-update)
+      - name: poetry lock
         if: (!matrix.cloud || env.GUBBI_CLOUD_PAT != '')
         working-directory: ${{ matrix.repo }}
-        run: poetry lock --no-update
+        run: poetry lock
 
       - name: poetry install
         if: (!matrix.cloud || env.GUBBI_CLOUD_PAT != '')
