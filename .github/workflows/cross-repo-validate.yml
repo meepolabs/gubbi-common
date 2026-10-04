@@ -1,19 +1,21 @@
 name: cross-repo-validate
 
-# Validates this PR's gubbi-common against downstream consumers BEFORE merge.
-# This is the gate required by D4: "cross-repo CI infrastructure FIRST, then
-# promote 5 modules ONE-AT-A-TIME validated by cross-repo CI."
+# Advisory early warning: runs each develop push of gubbi-common against the
+# develop branch of every downstream consumer. It is deliberately not a
+# dependency of the required CI check: downstream repos pin gubbi-common by
+# revision, so a change in a mutable downstream branch must not change the
+# verdict on an unchanged gubbi-common commit.
 #
 # Secret requirements:
 #   GUBBI_CLOUD_PAT (GitHub personal access token with repo scope) must be
 #   created in the gubbi-common repo Settings > Secrets and variables > Actions.
 #   Without it, the gubbi-cloud matrix entry fails fast at the verify step
-#   with an actionable error; the gubbi step still runs unconditionally and
-#   blocks merge on failure.
+#   with an actionable error; the gubbi entry still runs unconditionally.
 
 on:
-  pull_request:
-    branches: [main]
+  push:
+    branches: [develop]
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -87,7 +89,7 @@ jobs:
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:
           repository: meepolabs/${{ matrix.repo }}
-          ref: main
+          ref: develop
           path: ${{ matrix.repo }}
           # gubbi-cloud is private; authenticate with the PAT. Guarded above.
           token: ${{ secrets.GUBBI_CLOUD_PAT }}
@@ -146,7 +148,11 @@ jobs:
         run: poetry run pytest tests/ -x --ignore=tests/integration
 
       # gubbi-cloud: narrow unit-only gate for now (start narrow; expand later).
+      # The pin-resolution test asserts the lock matches the declared git
+      # revision, which the path override above replaces on purpose.
       - name: Run gubbi-cloud unit tests
         if: matrix.cloud && env.GUBBI_CLOUD_PAT != ''
         working-directory: ${{ matrix.repo }}
-        run: poetry run pytest tests/unit/ -x
+        run: >-
+          poetry run pytest tests/unit/ -x
+          --deselect tests/unit/test_gubbi_common_pin.py::test_the_lock_resolves_the_revision_the_pin_declares

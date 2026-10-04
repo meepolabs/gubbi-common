@@ -71,15 +71,23 @@ breaking-ish runtime type change requiring consumer audit).
 
 ### Cross-repo CI
 
-When a PR targets `main`, the workflow
+On every push to `develop` (and on manual `workflow_dispatch`), the
+workflow
 [`.github/workflows/cross-repo-validate.yml`](./.github/workflows/cross-repo-validate.yml)
-checks branch changes against each downstream consumer (`gubbi` /
-`gubbi-cloud`). It overrides the `gubbi-common` dependency in each
-downstream's `pyproject.toml` to use `path = "../gubbi-common"` with
-`develop = true`, runs their test suites, and blocks merge if a
-downstream breakage is detected.
+checks the pushed commit against the `develop` branch of each downstream
+consumer (`gubbi` / `gubbi-cloud`). It overrides the `gubbi-common`
+dependency in each downstream's `pyproject.toml` to use
+`path = "../gubbi-common"` with `develop = true`, re-locks, and runs
+their test suites. gubbi-cloud's pin-resolution test is deselected,
+since the path override replaces the pin on purpose.
+
+The check is advisory: it is an early warning of downstream breakage
+and does not block merge or promotion. Downstream repos pin
+`gubbi-common` by revision, so a change in a downstream `develop`
+branch must not change the verdict on an unchanged `gubbi-common`
+commit.
 
 The `gubbi-cloud` matrix entry requires the `GUBBI_CLOUD_PAT` secret
 (a GitHub personal access token with `repo` scope) to be set in this
-repo's Settings > Secrets. Without it the step skips with a warning on
-fork PRs; the gubbi and core `test` jobs still run unconditionally.
+repo's Settings > Secrets. Without it that entry fails fast with an
+actionable error; the `gubbi` entry still runs unconditionally.
