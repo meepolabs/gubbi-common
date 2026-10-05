@@ -59,13 +59,13 @@ jobs:
         run: poetry run python tools/check_gubbi_common_purity.py
 
       - name: ruff check
-        run: poetry run ruff check gubbi_common/ tests/
+        run: poetry run ruff check gubbi_common/ tests/ tools/
 
       - name: ruff format --check
-        run: poetry run ruff format --check gubbi_common/ tests/
+        run: poetry run ruff format --check gubbi_common/ tests/ tools/
 
       - name: mypy
-        run: poetry run mypy gubbi_common/
+        run: poetry run mypy gubbi_common/ tools/
 
   test:
     name: test (py312)
