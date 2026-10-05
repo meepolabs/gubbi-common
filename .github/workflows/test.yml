@@ -153,8 +153,8 @@ jobs:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_gubbi
         run: poetry run pytest tests/ -x --cov=gubbi_common --cov-report=term-missing
 
-  gitleaks:
-    name: gitleaks
+  secret-scan:
+    name: secret scan
     permissions:
       contents: read
       pull-requests: read
@@ -171,7 +171,7 @@ jobs:
     needs:
       - lint
       - test
-      - gitleaks
+      - secret-scan
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:

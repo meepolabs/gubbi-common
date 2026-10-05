@@ -55,8 +55,7 @@ select = [
     "PERF", "RUF", "TCH",
     # Docstring presence + format. D101/D102/D103 enforce public-class /
     # method / function docstrings; D200/D205/D400 enforce summary-line
-    # format. Adopted from meepo-conventions baseline; tests/ are exempt
-    # via per-file-ignores below.
+    # format. tests/ are exempt via per-file-ignores below.
     "D101", "D102", "D103", "D200", "D205", "D400",
 ]
 ignore = ["ANN401", "N818", "RUF001", "RUF002", "RUF003", "PERF203"]
@@ -139,7 +138,7 @@ markers = [
 ]
 
 [tool.coverage.report]
-# Floor; ratchet quarterly. Adopted from meepo-conventions baseline;
-# starting at 60 (canonical conservative default for a new gate). Bump
-# after a coverage-improvement PR observes the steady-state level.
+# Floor; ratchet quarterly. Starting at 60 (canonical conservative default
+# for a new gate). Bump after a coverage-improvement PR observes the
+# steady-state level.
 fail_under = 60

@@ -25,6 +25,7 @@ _WORKFLOW_PATH: Final[Path] = _WORKFLOWS_DIR / "test.yml"
 
 _AGGREGATOR_JOB: Final[str] = "required"
 _VERDICT_STEP: Final[str] = "every required job succeeded"
+_SECRET_SCAN_JOB: Final[str] = "secret-scan"
 
 # Workflows that must never gate merges: the downstream check reads
 # mutable downstream branches, and dependency findings are cleared by
@@ -77,10 +78,19 @@ def test_required_reports_under_its_own_name(aggregator: dict[str, Any]) -> None
     assert aggregator["name"] == _AGGREGATOR_JOB
 
 
-def test_secret_scan_is_called_as_a_required_lane(jobs: dict[str, Any]) -> None:
-    called = {str(job.get("uses", "")) for job in jobs.values() if isinstance(job, dict)}
+def test_secret_scan_is_called_as_a_required_lane(
+    jobs: dict[str, Any], aggregator: dict[str, Any]
+) -> None:
+    # Arrange
+    job = jobs[_SECRET_SCAN_JOB]
 
-    assert "./.github/workflows/gitleaks.yml" in called
+    # Act
+    needs = _needs(aggregator)
+
+    # Assert
+    assert job["uses"] == "./.github/workflows/gitleaks.yml"
+    assert job["name"] == "secret scan"
+    assert _SECRET_SCAN_JOB in needs
 
 
 def test_no_advisory_workflow_is_called(jobs: dict[str, Any]) -> None:
@@ -101,6 +111,22 @@ def test_secret_scan_workflow_is_callable_and_keeps_its_push_trigger() -> None:
     assert "workflow_call" in triggers
     assert "push" in triggers
     assert "pull_request" not in triggers, "pull requests are scanned through the caller"
+
+
+def test_secret_scan_push_runs_never_share_a_concurrency_group() -> None:
+    """A ref-keyed group lets a newer push displace the pending scan of an earlier one."""
+    # Arrange
+    parsed = yaml.safe_load((_WORKFLOWS_DIR / "gitleaks.yml").read_text(encoding="utf-8"))
+
+    # Act
+    concurrency = parsed["concurrency"]
+
+    # Assert
+    assert concurrency["group"] == (
+        "${{ github.workflow }}-${{ github.event_name }}-"
+        "${{ github.event_name == 'push' && github.sha || github.ref }}"
+    )
+    assert concurrency["cancel-in-progress"] == "${{ github.event_name == 'pull_request' }}"
 
 
 def test_pull_requests_into_every_branch_run_the_workflow() -> None:
