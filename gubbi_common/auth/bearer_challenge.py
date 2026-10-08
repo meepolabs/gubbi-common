@@ -41,12 +41,9 @@ __all__ = ["build_bearer_challenge"]
 # (which must be a token per RFC 6750 sec 3).
 _TOKEN_RE: re.Pattern[str] = re.compile(r"^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$")
 
-# RFC 6749 sec 3.3 scope grammar (single scope-token).
+# Multi-scope value: space-separated scope-tokens. RFC 6749 sec 3.3 ABNF:
+# scope = scope-token *( SP scope-token )
 # scope-token = 1*( %x21 / %x23-5B / %x5D-7E )
-_SCOPE_TOKEN_RE: re.Pattern[str] = re.compile(r"^[\x21\x23-\x5B\x5D-\x7E]+$")
-
-# Multi-scope value: space-separated scope-tokens. RFC 6749 ABNF for
-# ``scope`` itself: scope = scope-token *( SP scope-token ).
 _SCOPE_RE: re.Pattern[str] = re.compile(
     r"^[\x21\x23-\x5B\x5D-\x7E]+(?: [\x21\x23-\x5B\x5D-\x7E]+)*$"
 )
