@@ -1,7 +1,8 @@
 """Contract tests for the `required` aggregator job in the CI test workflow.
 
-`required` is the only check the branch rule names, so a lane gates
-merges only if `required` lists it in `needs`. A job added to the
+`required` is the CI workflow's aggregator context; the `security-floor`
+check from security.yml is a separate status. A CI lane gates merges only
+if `required` lists it in `needs`. A job added to the
 workflow but not to `needs` would run, could fail, and still let the
 change through. These tests parse the workflow so the job set and the
 `needs` list are compared directly rather than against a hand-kept copy.
@@ -35,6 +36,7 @@ _NEVER_CALLED_WORKFLOWS: Final[frozenset[str]] = frozenset(
 
 _SECURITY_WORKFLOW: Final[str] = "security.yml"
 _SECURITY_FLOOR_ACTION: Final[str] = "meepolabs/meepolabs-conventions/actions/security-floor@"
+_SECURITY_FLOOR_ACTION_PATH: Final[str] = "actions/security-floor"
 # Scans the shared security floor replaced; a copy re-added here would run
 # a second, divergent scan.
 _RETIRED_SCAN_WORKFLOWS: Final[frozenset[str]] = frozenset({"gitleaks.yml", "dependency-scan.yml"})
@@ -87,6 +89,14 @@ def test_no_never_called_workflow_is_a_lane(jobs: dict[str, Any]) -> None:
     for name, job in jobs.items():
         uses = str(job.get("uses", ""))
         assert Path(uses).name not in _NEVER_CALLED_WORKFLOWS, f"job {name!r} calls {uses!r}"
+
+
+def test_no_lane_runs_the_security_floor_as_a_step(jobs: dict[str, Any]) -> None:
+    """A lane running the floor would fold the separate security-floor status into `required`."""
+    for name, job in jobs.items():
+        for step in job.get("steps", []):
+            uses = str(step.get("uses", ""))
+            assert _SECURITY_FLOOR_ACTION_PATH not in uses, f"job {name!r} runs {uses!r}"
 
 
 def test_security_workflow_replaces_the_retired_scans() -> None:

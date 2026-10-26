@@ -152,7 +152,8 @@ jobs:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_gubbi
         run: poetry run pytest tests/ -x --cov=gubbi_common --cov-report=term-missing
 
-  # The single branch-rule context. It must list every blocking lane:
+  # This workflow's aggregator context; the security-floor check from
+  # security.yml is a separate status. It must list every blocking lane:
   # a lane missing from `needs` is not gated at all.
   required:
     name: required
