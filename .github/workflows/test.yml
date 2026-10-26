@@ -1,8 +1,7 @@
 name: test
 
-# pull_request is unfiltered on purpose: test.yml also runs the secret
-# scan, so a branch filter here would leave pull requests into other
-# branches unscanned.
+# The secret and dependency scans run in security.yml (the security-floor
+# check), outside `required`.
 on:
   pull_request:
   push:
@@ -153,14 +152,6 @@ jobs:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_gubbi
         run: poetry run pytest tests/ -x --cov=gubbi_common --cov-report=term-missing
 
-  secret-scan:
-    name: secret scan
-    permissions:
-      contents: read
-      pull-requests: read
-    uses: ./.github/workflows/gitleaks.yml
-    secrets: inherit
-
   # The single branch-rule context. It must list every blocking lane:
   # a lane missing from `needs` is not gated at all.
   required:
@@ -171,7 +162,6 @@ jobs:
     needs:
       - lint
       - test
-      - secret-scan
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:

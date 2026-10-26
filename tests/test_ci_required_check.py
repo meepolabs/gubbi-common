@@ -25,14 +25,19 @@ _WORKFLOW_PATH: Final[Path] = _WORKFLOWS_DIR / "test.yml"
 
 _AGGREGATOR_JOB: Final[str] = "required"
 _VERDICT_STEP: Final[str] = "every required job succeeded"
-_SECRET_SCAN_JOB: Final[str] = "secret-scan"
 
-# Workflows that must never gate merges: the downstream check reads
-# mutable downstream branches, and dependency findings are cleared by
-# update PRs rather than by blocking unrelated work.
-_ADVISORY_WORKFLOWS: Final[frozenset[str]] = frozenset(
-    {"cross-repo-validate.yml", "dependency-scan.yml"}
+# Workflows no lane of `required` may call: the downstream check reads
+# mutable downstream branches, and security.yml is its own check, enforced
+# at the branch rule rather than through `required`.
+_NEVER_CALLED_WORKFLOWS: Final[frozenset[str]] = frozenset(
+    {"cross-repo-validate.yml", "security.yml"}
 )
+
+_SECURITY_WORKFLOW: Final[str] = "security.yml"
+_SECURITY_FLOOR_ACTION: Final[str] = "meepolabs/meepolabs-conventions/actions/security-floor@"
+# Scans the shared security floor replaced; a copy re-added here would run
+# a second, divergent scan.
+_RETIRED_SCAN_WORKFLOWS: Final[frozenset[str]] = frozenset({"gitleaks.yml", "dependency-scan.yml"})
 
 
 @pytest.fixture(scope="module")
@@ -78,67 +83,37 @@ def test_required_reports_under_its_own_name(aggregator: dict[str, Any]) -> None
     assert aggregator["name"] == _AGGREGATOR_JOB
 
 
-def test_secret_scan_is_called_as_a_required_lane(
-    jobs: dict[str, Any], aggregator: dict[str, Any]
-) -> None:
-    # Arrange
-    job = jobs[_SECRET_SCAN_JOB]
-
-    # Act
-    needs = _needs(aggregator)
-
-    # Assert
-    assert job["uses"] == "./.github/workflows/gitleaks.yml"
-    assert job["name"] == "secret scan"
-    assert _SECRET_SCAN_JOB in needs
-
-
-def test_no_advisory_workflow_is_called(jobs: dict[str, Any]) -> None:
+def test_no_never_called_workflow_is_a_lane(jobs: dict[str, Any]) -> None:
     for name, job in jobs.items():
         uses = str(job.get("uses", ""))
-        assert Path(uses).name not in _ADVISORY_WORKFLOWS, f"job {name!r} calls advisory {uses!r}"
+        assert Path(uses).name not in _NEVER_CALLED_WORKFLOWS, f"job {name!r} calls {uses!r}"
 
 
-def test_secret_scan_workflow_is_callable_and_keeps_its_push_trigger() -> None:
-    """Push scans must not depend on the caller: a newer push cancels the caller's run."""
-    # Arrange
-    parsed = yaml.safe_load((_WORKFLOWS_DIR / "gitleaks.yml").read_text(encoding="utf-8"))
-
-    # Act: PyYAML reads the bare `on` key as boolean True.
-    triggers = parsed[True]
+def test_security_workflow_replaces_the_retired_scans() -> None:
+    # Act
+    workflow_names = {path.name for path in _WORKFLOWS_DIR.iterdir()}
 
     # Assert
-    assert "workflow_call" in triggers
-    assert "push" in triggers
-    assert "pull_request" not in triggers, "pull requests are scanned through the caller"
+    assert _SECURITY_WORKFLOW in workflow_names
+    assert not workflow_names & _RETIRED_SCAN_WORKFLOWS
 
 
-def test_secret_scan_push_runs_never_share_a_concurrency_group() -> None:
-    """A ref-keyed group lets a newer push displace the pending scan of an earlier one."""
+def test_security_workflow_runs_the_shared_floor_on_full_history() -> None:
+    """A shallow clone fails the floor, and a cancelled push run is that push's only scan."""
     # Arrange
-    parsed = yaml.safe_load((_WORKFLOWS_DIR / "gitleaks.yml").read_text(encoding="utf-8"))
+    parsed = yaml.safe_load((_WORKFLOWS_DIR / _SECURITY_WORKFLOW).read_text(encoding="utf-8"))
 
     # Act
-    concurrency = parsed["concurrency"]
+    (job,) = parsed["jobs"].values()
+    checkout, floor = job["steps"]
 
     # Assert
-    assert concurrency["group"] == (
-        "${{ github.workflow }}-${{ github.event_name }}-"
-        "${{ github.event_name == 'push' && github.sha || github.ref }}"
+    assert checkout["uses"].startswith("actions/checkout@")
+    assert checkout["with"]["fetch-depth"] == 0
+    assert floor["uses"].startswith(_SECURITY_FLOOR_ACTION)
+    assert parsed["concurrency"]["cancel-in-progress"] == (
+        "${{ github.event_name == 'pull_request' }}"
     )
-    assert concurrency["cancel-in-progress"] == "${{ github.event_name == 'pull_request' }}"
-
-
-def test_pull_requests_into_every_branch_run_the_workflow() -> None:
-    """The secret scan reaches pull requests only through this workflow."""
-    # Arrange
-    parsed = yaml.safe_load(_WORKFLOW_PATH.read_text(encoding="utf-8"))
-
-    # Act: PyYAML reads the bare `on` key as boolean True.
-    pull_request = parsed[True]["pull_request"]
-
-    # Assert
-    assert not pull_request, f"pull_request trigger is filtered: {pull_request!r}"
 
 
 # ---------------------------------------------------------------------------
