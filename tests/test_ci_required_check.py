@@ -58,22 +58,27 @@ def aggregator(jobs: dict[str, Any]) -> dict[str, Any]:
     return job
 
 
+@pytest.fixture(scope="module")
+def lanes(jobs: dict[str, Any]) -> dict[str, Any]:
+    """Every job but the aggregator; empty would make the checks below vacuous."""
+    other_jobs = {name: job for name, job in jobs.items() if name != _AGGREGATOR_JOB}
+    assert other_jobs, f"{_WORKFLOW_PATH.name} has no job besides {_AGGREGATOR_JOB!r}"
+    return other_jobs
+
+
 def _needs(job: dict[str, Any]) -> list[str]:
     needs = job.get("needs", [])
     return [needs] if isinstance(needs, str) else list(needs)
 
 
-def test_required_needs_every_other_job(jobs: dict[str, Any], aggregator: dict[str, Any]) -> None:
+def test_required_needs_every_other_job(lanes: dict[str, Any], aggregator: dict[str, Any]) -> None:
     """A job left out of `needs` would not gate merges at all."""
-    # Arrange
-    lanes = set(jobs) - {_AGGREGATOR_JOB}
-
     # Act
     needs = _needs(aggregator)
 
     # Assert
     assert len(needs) == len(set(needs)), f"duplicate entries in needs: {needs}"
-    assert set(needs) == lanes
+    assert set(needs) == set(lanes)
 
 
 def test_required_runs_even_when_a_lane_fails(aggregator: dict[str, Any]) -> None:
@@ -91,6 +96,7 @@ def test_no_never_called_workflow_is_a_lane(jobs: dict[str, Any]) -> None:
         assert Path(uses).name not in _NEVER_CALLED_WORKFLOWS, f"job {name!r} calls {uses!r}"
 
 
+@pytest.mark.usefixtures("lanes")
 def test_no_lane_runs_the_security_floor_as_a_step(jobs: dict[str, Any]) -> None:
     """A lane running the floor would fold the separate security-floor status into `required`."""
     for name, job in jobs.items():
