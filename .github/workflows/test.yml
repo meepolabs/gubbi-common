@@ -20,7 +20,7 @@ jobs:
     name: lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Python 3.12
         id: setup-python
@@ -87,7 +87,7 @@ jobs:
           POSTGRES_DB: test_gubbi
 
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # The audit_log fixture in tests/integration mirrors the sibling
       # gubbi repo's migration chain, and the staleness guards compare it
@@ -97,7 +97,7 @@ jobs:
       # below makes a missing checkout fail the lane instead of skipping,
       # so a regression in this step cannot hide.
       - name: Check out pinned gubbi migration source
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: meepolabs/gubbi
           ref: a74ae71114d346c4118d67922e2c5e5387d9aaa8
@@ -164,7 +164,7 @@ jobs:
       - lint
       - test
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
