@@ -50,7 +50,7 @@ jobs:
       # rejects paths that escape it. Lay them out as siblings under the
       # workspace so the downstream's `path = "../gubbi-common"` override
       # below resolves correctly.
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: gubbi-common
           persist-credentials: false
@@ -86,7 +86,7 @@ jobs:
 
       # -- Checkout downstream repo -------------------------------------------
       - name: Checkout ${{ matrix.repo }}
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: meepolabs/${{ matrix.repo }}
           ref: develop
